@@ -157,6 +157,10 @@ async def process_subscription_payment(message: Message):
     save_subscription(user_id, subscription_data)
     logger.info(f"[SUBSCRIPTIONS] Подписка успешно сохранена для user_id={user_id}")
     
+    # Сбрасываем флаги уведомлений при продлении подписки
+    from handlers.subscription_notifications import reset_notification_flags
+    reset_notification_flags(user_id)
+    
     await message.answer(
         '✅ <b>Подписка активирована!</b>\n\n'
         f'Подписка действительна до: {expires_at.strftime("%d.%m.%Y")}\n\n'

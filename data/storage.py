@@ -1,7 +1,7 @@
 import json
 import os
 from typing import List, Dict, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 
 def format_number(num: float) -> str:
     """Форматировать число с пробелами вместо запятых (1 115 вместо 1,115)"""
@@ -110,6 +110,26 @@ def save_subscription(user_id: int, subscription_data: Dict):
     except Exception as e:
         logger.error(f"save_subscription: ошибка при сохранении файла: {e}", exc_info=True)
         raise
+
+def grant_access(user_id: int, days: int = 30):
+    """Выдать доступ пользователю на указанное количество дней"""
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    expires_at = datetime.now() + timedelta(days=days)
+    subscription_data = {
+        'active': True,
+        'expiresAt': expires_at.isoformat(),
+        'subscriptionId': '',
+        'paymentDate': datetime.now().isoformat(),
+        'invoicePayload': f'granted_{int(datetime.now().timestamp())}'
+    }
+    
+    logger.info(f"grant_access: выдача доступа user_id={user_id}, days={days}, expires_at={expires_at.isoformat()}")
+    save_subscription(user_id, subscription_data)
+    logger.info(f"grant_access: доступ успешно выдан для user_id={user_id}")
+    
+    return expires_at
 
 def is_subscribed(user_id: int) -> bool:
     """Проверить, есть ли активная подписка"""

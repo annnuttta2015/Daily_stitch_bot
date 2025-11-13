@@ -8,7 +8,7 @@ from aiogram.types import Message
 from aiogram.filters import Command
 from config import BOT_TOKEN
 from data.storage import is_subscribed
-from handlers import commands, entries, statistics, projects, delete, hashtags, wishlist, notes, plans, calendar, challenges, subscriptions, period_comparison, export
+from handlers import commands, entries, statistics, projects, delete, hashtags, wishlist, notes, plans, calendar, challenges, subscriptions, period_comparison, export, admin
 from handlers.keyboards import get_main_menu
 
 # Настройка логирования
@@ -63,6 +63,7 @@ dp.include_router(challenges.router)
 dp.include_router(subscriptions.router)
 dp.include_router(period_comparison.router)
 dp.include_router(export.router)
+dp.include_router(admin.router)
 
 # Обработка текстовых сообщений (для диалогов)
 @dp.message(lambda msg: msg.text and not msg.text.startswith('/'))
@@ -131,12 +132,24 @@ async def cmd_cancel(message: Message):
 async def main():
     logger.info("🤖 Запуск бота...")
     try:
+        # Запускаем фоновую задачу для проверки подписок
+        from handlers.subscription_notifications import subscription_checker_task
+        task = asyncio.create_task(subscription_checker_task(bot))
+        logger.info("✅ Фоновая задача проверки подписок запущена")
+        
         logger.info("Подключение к Telegram API...")
         await dp.start_polling(bot, skip_updates=True)
     except Exception as e:
         logger.error(f"Ошибка при запуске бота: {e}", exc_info=True)
         raise
     finally:
+        # Отменяем фоновую задачу при остановке
+        if 'task' in locals():
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
         await bot.session.close()
 
 if __name__ == '__main__':
