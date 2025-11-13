@@ -157,8 +157,8 @@ def check_challenge_progress(user_id: int, challenge_id: str, user_challenge: Di
                 entry_date = datetime.strptime(entry.get('date', ''), '%Y-%m-%d').date()
                 if start_date.date() <= entry_date <= min(period_end.date(), today):
                     if entry_date not in days_with_entries:
-                        days_with_entries[entry_date] = 0
-                    days_with_entries[entry_date] += entry.get('count', 0)
+                        days_with_entries[entry_date] = 0.0
+                    days_with_entries[entry_date] += float(entry.get('count', 0))
             except:
                 continue
         

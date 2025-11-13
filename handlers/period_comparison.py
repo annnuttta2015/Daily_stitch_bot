@@ -3,6 +3,7 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKe
 from datetime import datetime, timedelta
 from data.storage import get_entries, format_number
 from handlers.keyboards import get_back_keyboard
+from utils import safe_answer_callback
 
 router = Router()
 
@@ -104,7 +105,7 @@ async def show_period_comparison(message: Message, user_id: int):
 
 @router.callback_query(F.data == "period_comparison")
 async def callback_period_comparison(callback: CallbackQuery):
-    await callback.answer()
+    await safe_answer_callback(callback)
     await show_period_comparison(callback.message, callback.from_user.id)
 
 

@@ -3,6 +3,7 @@ from aiogram.types import Message, CallbackQuery
 from datetime import datetime
 from data.storage import get_projects, save_project, remove_project_photo
 from handlers.keyboards import get_back_keyboard, get_project_navigation
+from utils import safe_answer_callback
 import os
 
 router = Router()
@@ -214,7 +215,7 @@ async def show_project_by_index(message, user_id: int, index: int, is_edit: bool
 
 @router.callback_query(F.data.startswith("project_prev_"))
 async def callback_project_prev(callback: CallbackQuery):
-    await callback.answer()
+    await safe_answer_callback(callback)
     user_id = callback.from_user.id
     index = int(callback.data.split('_')[-1])
     if index > 0:
@@ -222,7 +223,7 @@ async def callback_project_prev(callback: CallbackQuery):
 
 @router.callback_query(F.data.startswith("project_next_"))
 async def callback_project_next(callback: CallbackQuery):
-    await callback.answer()
+    await safe_answer_callback(callback)
     user_id = callback.from_user.id
     index = int(callback.data.split('_')[-1])
     projects_list = get_projects(user_id)
@@ -231,7 +232,7 @@ async def callback_project_next(callback: CallbackQuery):
 
 @router.callback_query(F.data.startswith("project_change_photo_"))
 async def callback_change_project_photo(callback: CallbackQuery):
-    await callback.answer()
+    await safe_answer_callback(callback)
     user_id = callback.from_user.id
     project_id = callback.data.replace("project_change_photo_", "")
     
@@ -259,7 +260,7 @@ async def callback_change_project_photo(callback: CallbackQuery):
 
 @router.callback_query(F.data.startswith("project_delete_photo_"))
 async def callback_delete_project_photo(callback: CallbackQuery):
-    await callback.answer()
+    await safe_answer_callback(callback)
     user_id = callback.from_user.id
     project_id = callback.data.replace("project_delete_photo_", "")
     

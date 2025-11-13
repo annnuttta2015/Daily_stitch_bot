@@ -4,6 +4,7 @@ from datetime import datetime
 from dateutil import parser
 from data.storage import delete_all_user_data, delete_entry_by_date, get_entries
 from handlers.keyboards import get_delete_menu, get_back_keyboard
+from utils import safe_answer_callback
 
 router = Router()
 
@@ -12,7 +13,7 @@ pending_deletes = {}
 
 @router.callback_query(F.data == "delete_menu")
 async def callback_delete_menu(callback: CallbackQuery):
-    await callback.answer()
+    await safe_answer_callback(callback)
     await callback.message.edit_text(
         '🗑️ <b>Удаление данных</b>\n\n'
         'Выберите что удалить:',
@@ -22,7 +23,7 @@ async def callback_delete_menu(callback: CallbackQuery):
 
 @router.callback_query(F.data == "delete_all")
 async def callback_delete_all(callback: CallbackQuery):
-    await callback.answer()
+    await safe_answer_callback(callback)
     user_id = callback.from_user.id
     
     # Запрашиваем подтверждение
@@ -39,16 +40,16 @@ async def callback_delete_all(callback: CallbackQuery):
         '• Все записи о крестиках\n'
         '• Все проекты и фото\n'
         '• Вишлист, заметки, планы/цели\n'
-        '• Челленджи и подписки\n\n'
+        '• Челленджи\n\n'
         '⚠️ Это действие нельзя отменить!\n'
-        'ℹ️ Ваш ID останется в списке пользователей для статистики.',
+        'ℹ️ Ваш ID и подписка останутся для сохранения доступа к боту.',
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard)
     )
 
 @router.callback_query(F.data == "confirm_delete_all")
 async def callback_confirm_delete_all(callback: CallbackQuery):
-    await callback.answer()
+    await safe_answer_callback(callback)
     user_id = callback.from_user.id
     delete_all_user_data(user_id)
     await callback.message.edit_text(
@@ -59,7 +60,7 @@ async def callback_confirm_delete_all(callback: CallbackQuery):
 
 @router.callback_query(F.data == "delete_day")
 async def callback_delete_day(callback: CallbackQuery):
-    await callback.answer()
+    await safe_answer_callback(callback)
     user_id = callback.from_user.id
     pending_deletes[user_id] = {'step': 'date'}
     await callback.message.edit_text(

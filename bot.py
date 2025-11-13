@@ -1,5 +1,8 @@
 import asyncio
 import logging
+import os
+import sys
+from logging.handlers import RotatingFileHandler
 from aiogram import Bot, Dispatcher
 from aiogram.types import Message
 from aiogram.filters import Command
@@ -9,9 +12,30 @@ from handlers import commands, entries, statistics, projects, delete, hashtags, 
 from handlers.keyboards import get_main_menu
 
 # Настройка логирования
+from logging.handlers import RotatingFileHandler
+
+# Создаем директорию для логов, если её нет
+log_dir = 'logs'
+os.makedirs(log_dir, exist_ok=True)
+
+# Настройка логирования в файл и консоль
+log_file = os.path.join(log_dir, 'bot.log')
+file_handler = RotatingFileHandler(
+    log_file, 
+    maxBytes=10*1024*1024,  # 10 МБ
+    backupCount=5,
+    encoding='utf-8'
+)
+file_handler.setLevel(logging.DEBUG)  # DEBUG для файла - больше деталей
+file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s'))
+
+console_handler = logging.StreamHandler(sys.stdout)
+console_handler.setLevel(logging.INFO)  # INFO для консоли
+console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.DEBUG,  # DEBUG для корневого логгера
+    handlers=[file_handler, console_handler]
 )
 logger = logging.getLogger(__name__)
 
@@ -26,6 +50,7 @@ dp.callback_query.outer_middleware(UserTrackerMiddleware())
 
 # Регистрация роутеров
 dp.include_router(commands.router)
+dp.include_router(entries.router)  # Роутер для обработки кнопок добавления крестиков
 dp.include_router(statistics.router)
 dp.include_router(projects.router)
 dp.include_router(delete.router)
@@ -47,8 +72,13 @@ async def handle_text_messages(message: Message):
     if not is_subscribed(user_id):
         return
     
+    # Логируем входящее текстовое сообщение
+    logger.info(f"[BOT] Получено текстовое сообщение от user_id={user_id}, text='{message.text[:100] if message.text else 'None'}'")
+    
     # Обрабатываем диалог добавления крестиков
-    if await entries.process_entry_message(message, user_id):
+    result = await entries.process_entry_message(message, user_id)
+    if result:
+        logger.info(f"[BOT] Сообщение обработано в process_entry_message, результат: {result}")
         return
     
     # Обрабатываем диалог добавления проекта

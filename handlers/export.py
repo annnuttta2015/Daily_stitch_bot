@@ -8,6 +8,7 @@ from data.storage import (
     get_entries, get_projects, get_wishlist, get_notes, get_plans,
     get_user_challenges, get_user_subscription
 )
+from utils import safe_answer_callback
 from handlers.keyboards import get_back_keyboard
 
 router = Router()
@@ -55,7 +56,7 @@ async def export_user_data(message: Message, user_id: int):
 
 @router.callback_query(F.data == "export_data")
 async def callback_export_data(callback: CallbackQuery):
-    await callback.answer()
+    await safe_answer_callback(callback)
     await export_user_data(callback.message, callback.from_user.id)
 
 

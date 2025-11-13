@@ -4,6 +4,7 @@ from datetime import datetime
 from data.storage import get_user_challenges, add_user_challenge, delete_user_challenge, get_user_challenge, format_number
 from data.challenges import get_available_challenges, get_challenge_by_id, check_challenge_progress
 from handlers.keyboards import get_back_keyboard
+from utils import safe_answer_callback
 
 router = Router()
 
@@ -138,18 +139,18 @@ async def show_challenge_details(message: Message, user_id: int, challenge_id: s
 
 @router.callback_query(F.data == "challenges_menu")
 async def callback_challenges_menu(callback: CallbackQuery):
-    await callback.answer()
+    await safe_answer_callback(callback)
     await show_challenges_menu(callback.message, callback.from_user.id)
 
 @router.callback_query(F.data.startswith("challenge_select_"))
 async def callback_challenge_select(callback: CallbackQuery):
-    await callback.answer()
+    await safe_answer_callback(callback)
     challenge_id = callback.data.replace("challenge_select_", "")
     await show_challenge_details(callback.message, callback.from_user.id, challenge_id)
 
 @router.callback_query(F.data.startswith("challenge_start_"))
 async def callback_challenge_start(callback: CallbackQuery):
-    await callback.answer()
+    await safe_answer_callback(callback)
     challenge_id = callback.data.replace("challenge_start_", "")
     
     # Проверяем, не активен ли уже этот челлендж
@@ -184,13 +185,13 @@ async def callback_challenge_start(callback: CallbackQuery):
 
 @router.callback_query(F.data.startswith("challenge_view_"))
 async def callback_challenge_view(callback: CallbackQuery):
-    await callback.answer()
+    await safe_answer_callback(callback)
     challenge_id = callback.data.replace("challenge_view_", "")
     await show_challenge_details(callback.message, callback.from_user.id, challenge_id)
 
 @router.callback_query(F.data.startswith("challenge_cancel_"))
 async def callback_challenge_cancel(callback: CallbackQuery):
-    await callback.answer()
+    await safe_answer_callback(callback)
     challenge_id = callback.data.replace("challenge_cancel_", "")
     delete_user_challenge(challenge_id, callback.from_user.id)
     await callback.message.answer(

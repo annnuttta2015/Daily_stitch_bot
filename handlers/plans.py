@@ -4,6 +4,7 @@ from datetime import datetime
 from dateutil import parser
 from data.storage import get_plans, save_plan, delete_plan, get_entries, format_number
 from handlers.keyboards import get_back_keyboard
+from utils import safe_answer_callback
 
 router = Router()
 
@@ -230,12 +231,12 @@ async def show_plan(message: Message, user_id: int, plan_id: str):
 
 @router.callback_query(F.data == "plans_menu")
 async def callback_plans_menu(callback: CallbackQuery):
-    await callback.answer()
+    await safe_answer_callback(callback)
     await show_plans(callback.message, callback.from_user.id)
 
 @router.callback_query(F.data == "plan_add")
 async def callback_plan_add(callback: CallbackQuery):
-    await callback.answer("Введите название плана в следующем сообщении")
+    await safe_answer_callback(callback, "Введите название плана в следующем сообщении")
     try:
         await callback.message.edit_text(
             '📋 <b>Создание плана</b>\n\n'
@@ -258,7 +259,7 @@ async def callback_plan_add(callback: CallbackQuery):
 
 @router.callback_query(F.data.startswith("plan_"))
 async def callback_plan(callback: CallbackQuery):
-    await callback.answer()
+    await safe_answer_callback(callback)
     plan_id = callback.data.replace("plan_", "")
     if plan_id.startswith("delete_"):
         plan_id = plan_id.replace("delete_", "")

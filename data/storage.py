@@ -3,9 +3,17 @@ import os
 from typing import List, Dict, Optional
 from datetime import datetime
 
-def format_number(num: int) -> str:
+def format_number(num: float) -> str:
     """Форматировать число с пробелами вместо запятых (1 115 вместо 1,115)"""
-    return f"{num:,}".replace(',', ' ')
+    # Если число целое, форматируем без десятичной части
+    if num == int(num):
+        return f"{int(num):,}".replace(',', ' ')
+    # Если дробное, форматируем с одной десятичной цифрой
+    # Сначала форматируем целую часть с пробелами, потом добавляем дробную
+    int_part = int(num)
+    frac_part = num - int_part
+    int_str = f"{int_part:,}".replace(',', ' ')
+    return f"{int_str},{int(frac_part * 10)}"
 
 DATA_DIR = os.getenv('DATA_DIR', './data')
 ENTRIES_FILE = os.path.join(DATA_DIR, 'entries.json')
@@ -47,43 +55,83 @@ def is_authorized(user_id: int) -> bool:
 # === Подписки ===
 def get_user_subscription(user_id: int) -> Optional[Dict]:
     """Получить информацию о подписке пользователя"""
-    with open(SUBSCRIPTIONS_FILE, 'r', encoding='utf-8') as f:
-        subscriptions = json.load(f)
-    for sub in subscriptions:
-        if sub.get('userId') == user_id:
-            return sub
-    return None
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    if not os.path.exists(SUBSCRIPTIONS_FILE):
+        logger.debug(f"get_user_subscription: файл {SUBSCRIPTIONS_FILE} не существует")
+        return None
+    
+    try:
+        with open(SUBSCRIPTIONS_FILE, 'r', encoding='utf-8') as f:
+            subscriptions = json.load(f)
+        logger.debug(f"get_user_subscription: загружено {len(subscriptions)} подписок")
+        
+        for sub in subscriptions:
+            if sub.get('userId') == user_id:
+                logger.debug(f"get_user_subscription: найдена подписка для user_id={user_id}")
+                return sub
+        
+        logger.debug(f"get_user_subscription: подписка не найдена для user_id={user_id}")
+        return None
+    except Exception as e:
+        logger.error(f"get_user_subscription: ошибка при чтении файла: {e}", exc_info=True)
+        return None
 
 def save_subscription(user_id: int, subscription_data: Dict):
     """Сохранить информацию о подписке"""
+    import logging
+    logger = logging.getLogger(__name__)
+    
     subscriptions = []
     if os.path.exists(SUBSCRIPTIONS_FILE):
-        with open(SUBSCRIPTIONS_FILE, 'r', encoding='utf-8') as f:
-            subscriptions = json.load(f)
+        try:
+            with open(SUBSCRIPTIONS_FILE, 'r', encoding='utf-8') as f:
+                subscriptions = json.load(f)
+            logger.debug(f"save_subscription: загружено {len(subscriptions)} подписок из файла")
+        except Exception as e:
+            logger.error(f"save_subscription: ошибка при чтении файла: {e}", exc_info=True)
+            subscriptions = []
     
     # Удаляем старую подписку пользователя
+    old_count = len(subscriptions)
     subscriptions = [s for s in subscriptions if s.get('userId') != user_id]
+    if old_count != len(subscriptions):
+        logger.info(f"save_subscription: удалена старая подписка для user_id={user_id}")
     
     # Добавляем новую
     subscription_data['userId'] = user_id
     subscriptions.append(subscription_data)
     
-    with open(SUBSCRIPTIONS_FILE, 'w', encoding='utf-8') as f:
-        json.dump(subscriptions, f, ensure_ascii=False, indent=2)
+    try:
+        with open(SUBSCRIPTIONS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(subscriptions, f, ensure_ascii=False, indent=2)
+        logger.info(f"save_subscription: подписка сохранена для user_id={user_id}, всего подписок: {len(subscriptions)}")
+    except Exception as e:
+        logger.error(f"save_subscription: ошибка при сохранении файла: {e}", exc_info=True)
+        raise
 
 def is_subscribed(user_id: int) -> bool:
     """Проверить, есть ли активная подписка"""
+    import logging
+    logger = logging.getLogger(__name__)
+    
     # Импортируем здесь, чтобы избежать циклических импортов
     try:
         from config import TEST_MODE
         if TEST_MODE:
+            logger.debug(f"is_subscribed: TEST_MODE=True для user_id={user_id}, возвращаем True")
             return True  # В тестовом режиме все имеют доступ
-    except:
+    except Exception as e:
         # Если config не загружен, считаем что тестовый режим
+        logger.warning(f"is_subscribed: не удалось загрузить TEST_MODE: {e}, возвращаем True")
         return True
     
     subscription = get_user_subscription(user_id)
+    logger.debug(f"is_subscribed: user_id={user_id}, subscription={subscription is not None}")
+    
     if not subscription:
+        logger.info(f"is_subscribed: подписка не найдена для user_id={user_id}")
         return False
     
     # Проверяем, не истекла ли подписка
@@ -91,11 +139,16 @@ def is_subscribed(user_id: int) -> bool:
     if expires_at:
         try:
             expire_date = datetime.fromisoformat(expires_at)
-            return datetime.now() < expire_date
-        except:
+            is_active = datetime.now() < expire_date
+            logger.debug(f"is_subscribed: user_id={user_id}, expires_at={expires_at}, is_active={is_active}")
+            return is_active
+        except Exception as e:
+            logger.error(f"is_subscribed: ошибка при парсинге expires_at: {e}")
             return False
     
-    return subscription.get('active', False)
+    is_active = subscription.get('active', False)
+    logger.debug(f"is_subscribed: user_id={user_id}, active={is_active}")
+    return is_active
 
 # === Пользователи ===
 def save_user_id(user_id: int):
@@ -127,7 +180,7 @@ def get_entries(user_id: Optional[int] = None) -> List[Dict]:
         return [e for e in entries if e.get('userId') == user_id]
     return entries
 
-def add_count_to_date(date: str, count: int, user_id: int, hashtag: Optional[str] = None):
+def add_count_to_date(date: str, count: float, user_id: int, hashtag: Optional[str] = None):
     """Добавить крестики за дату с опциональным хэштегом"""
     entries = get_entries()
     # Ищем существующую запись за эту дату без хэштега или с таким же хэштегом
@@ -136,7 +189,7 @@ def add_count_to_date(date: str, count: int, user_id: int, hashtag: Optional[str
         if (entry.get('date') == date and 
             entry.get('userId') == user_id and 
             entry.get('hashtag') == hashtag):
-            entry['count'] = entry.get('count', 0) + count
+            entry['count'] = float(entry.get('count', 0)) + count
             found = True
             break
     
@@ -258,15 +311,7 @@ def delete_all_user_data(user_id: int):
     with open(CHALLENGES_FILE, 'w', encoding='utf-8') as f:
         json.dump(challenges, f, ensure_ascii=False, indent=2)
     
-    # Удаляем подписки
-    subscriptions = []
-    if os.path.exists(SUBSCRIPTIONS_FILE):
-        with open(SUBSCRIPTIONS_FILE, 'r', encoding='utf-8') as f:
-            subscriptions = json.load(f)
-    subscriptions = [s for s in subscriptions if s.get('userId') != user_id]
-    with open(SUBSCRIPTIONS_FILE, 'w', encoding='utf-8') as f:
-        json.dump(subscriptions, f, ensure_ascii=False, indent=2)
-    
+    # НЕ удаляем подписки - пользователь должен сохранить доступ к боту
     # НЕ удаляем ID из списка пользователей - для статистики и истории использования бота
 
 def delete_entry_by_date(date: str, user_id: int):

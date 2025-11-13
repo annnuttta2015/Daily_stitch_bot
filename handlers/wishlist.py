@@ -3,6 +3,7 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKe
 from datetime import datetime
 from data.storage import get_wishlist, add_to_wishlist, remove_from_wishlist, update_wishlist_item
 from handlers.keyboards import get_back_keyboard
+from utils import safe_answer_callback
 
 router = Router()
 
@@ -216,12 +217,12 @@ def get_wishlist_share_text(user_id: int, use_html: bool = True) -> str:
 
 @router.callback_query(F.data == "wishlist_menu")
 async def callback_wishlist_menu(callback: CallbackQuery):
-    await callback.answer()
+    await safe_answer_callback(callback)
     await show_wishlist(callback.message, callback.from_user.id)
 
 @router.callback_query(F.data == "wishlist_add")
 async def callback_wishlist_add(callback: CallbackQuery):
-    await callback.answer("Введите название работы в следующем сообщении")
+    await safe_answer_callback(callback, "Введите название работы в следующем сообщении")
     try:
         await callback.message.edit_text(
             '📝 <b>Добавление в вишлист</b>\n\n'
@@ -242,27 +243,27 @@ async def callback_wishlist_add(callback: CallbackQuery):
 
 @router.callback_query(F.data.startswith("wishlist_item_"))
 async def callback_wishlist_item(callback: CallbackQuery):
-    await callback.answer()
+    await safe_answer_callback(callback)
     item_id = callback.data.replace("wishlist_item_", "")
     await show_wishlist_item(callback.message, callback.from_user.id, item_id)
 
 @router.callback_query(F.data.startswith("wishlist_complete_"))
 async def callback_wishlist_complete(callback: CallbackQuery):
-    await callback.answer()
+    await safe_answer_callback(callback)
     item_id = callback.data.replace("wishlist_complete_", "")
     update_wishlist_item(item_id, callback.from_user.id, {'completed': True, 'completedAt': datetime.now().strftime('%Y-%m-%d')})
     await show_wishlist_item(callback.message, callback.from_user.id, item_id)
 
 @router.callback_query(F.data.startswith("wishlist_uncomplete_"))
 async def callback_wishlist_uncomplete(callback: CallbackQuery):
-    await callback.answer()
+    await safe_answer_callback(callback)
     item_id = callback.data.replace("wishlist_uncomplete_", "")
     update_wishlist_item(item_id, callback.from_user.id, {'completed': False})
     await show_wishlist_item(callback.message, callback.from_user.id, item_id)
 
 @router.callback_query(F.data.startswith("wishlist_delete_"))
 async def callback_wishlist_delete(callback: CallbackQuery):
-    await callback.answer()
+    await safe_answer_callback(callback)
     item_id = callback.data.replace("wishlist_delete_", "")
     remove_from_wishlist(item_id, callback.from_user.id)
     await callback.message.answer('✅ Удалено из вишлиста', reply_markup=get_back_keyboard())
@@ -270,7 +271,7 @@ async def callback_wishlist_delete(callback: CallbackQuery):
 
 @router.callback_query(F.data == "wishlist_share")
 async def callback_wishlist_share(callback: CallbackQuery):
-    await callback.answer()
+    await safe_answer_callback(callback)
     items = get_wishlist(callback.from_user.id)
     
     if not items:

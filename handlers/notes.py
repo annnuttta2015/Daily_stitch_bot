@@ -3,6 +3,7 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKe
 from datetime import datetime
 from data.storage import get_notes, save_note, delete_note
 from handlers.keyboards import get_back_keyboard
+from utils import safe_answer_callback
 
 router = Router()
 
@@ -139,12 +140,12 @@ async def show_note(message: Message, user_id: int, note_id: str):
 
 @router.callback_query(F.data == "notes_menu")
 async def callback_notes_menu(callback: CallbackQuery):
-    await callback.answer()
+    await safe_answer_callback(callback)
     await show_notes(callback.message, callback.from_user.id)
 
 @router.callback_query(F.data == "note_add")
 async def callback_note_add(callback: CallbackQuery):
-    await callback.answer("Введите название заметки в следующем сообщении")
+    await safe_answer_callback(callback, "Введите название заметки в следующем сообщении")
     try:
         await callback.message.edit_text(
             '📝 <b>Добавление заметки</b>\n\n'
@@ -165,7 +166,7 @@ async def callback_note_add(callback: CallbackQuery):
 
 @router.callback_query(F.data.startswith("note_"))
 async def callback_note(callback: CallbackQuery):
-    await callback.answer()
+    await safe_answer_callback(callback)
     note_id = callback.data.replace("note_", "")
     if note_id.startswith("delete_"):
         note_id = note_id.replace("delete_", "")

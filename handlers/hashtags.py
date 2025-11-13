@@ -3,6 +3,7 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKe
 from datetime import datetime
 from data.storage import get_all_hashtags, get_entries_by_hashtag, get_projects_by_hashtag, get_projects, format_number
 from handlers.keyboards import get_back_keyboard
+from utils import safe_answer_callback
 
 router = Router()
 
@@ -161,12 +162,12 @@ async def show_hashtag_progress(message: Message, user_id: int, hashtag: str):
 
 @router.callback_query(F.data == "hashtags_menu")
 async def callback_hashtags_menu(callback: CallbackQuery):
-    await callback.answer()
+    await safe_answer_callback(callback)
     await show_hashtags_menu(callback.message, callback.from_user.id)
 
 @router.callback_query(F.data.startswith("hashtag_"))
 async def callback_hashtag(callback: CallbackQuery):
-    await callback.answer()
+    await safe_answer_callback(callback)
     hashtag = callback.data.replace("hashtag_", "")
     await show_hashtag_progress(callback.message, callback.from_user.id, hashtag)
 

@@ -7,6 +7,7 @@ from handlers.statistics import show_statistics
 from handlers.projects import show_projects, add_project_dialog
 from handlers.keyboards import get_main_menu
 from config import ADMIN_IDS
+from utils import safe_answer_callback
 import logging
 
 router = Router()
@@ -18,7 +19,12 @@ async def cmd_start(message: Message):
     
     from config import TEST_MODE
     
-    if not TEST_MODE and not is_subscribed(user_id):
+    logger.info(f"[COMMANDS] /start вызван для user_id={user_id}, TEST_MODE={TEST_MODE}")
+    
+    subscription_status = is_subscribed(user_id)
+    logger.info(f"[COMMANDS] is_subscribed({user_id}) = {subscription_status}")
+    
+    if not TEST_MODE and not subscription_status:
         # Показываем информацию о подписке
         await message.answer(
             '🔒 <b>Дневник вышивальщицы</b>\n\n'
@@ -79,7 +85,7 @@ async def cmd_add(message: Message):
 
 @router.message(Command("users"))
 async def cmd_users(message: Message):
-    """Показать список ID пользователей (только для администраторов)"""
+    """Показать статистику по пользователям (только для администраторов)"""
     user_id = message.from_user.id
     
     # Проверяем, является ли пользователь администратором
@@ -87,24 +93,51 @@ async def cmd_users(message: Message):
         await message.answer('❌ У вас нет доступа к этой команде.')
         return
     
+    from data.storage import get_entries, get_projects, get_user_subscription
+    
     user_ids = get_all_user_ids()
     
     if not user_ids:
         await message.answer('📝 Пользователей пока нет.')
         return
     
-    text = f'<b>👥 Пользователи бота (всего: {len(user_ids)})</b>\n\n'
+    # Подсчитываем статистику
+    total_users = len(user_ids)
+    active_subscriptions = 0
+    total_entries = 0
+    total_projects = 0
     
-    # Показываем ID по 10 в строке для компактности
-    for i in range(0, len(user_ids), 10):
-        batch = user_ids[i:i+10]
-        text += ' '.join(f'<code>{uid}</code>' for uid in batch) + '\n'
+    for uid in user_ids:
+        if get_user_subscription(uid) and is_subscribed(uid):
+            active_subscriptions += 1
+        entries = get_entries(uid)
+        total_entries += len(entries)
+        projects = get_projects(uid)
+        total_projects += len(projects)
+    
+    text = f'<b>👥 Статистика пользователей</b>\n\n'
+    text += f'📊 Всего пользователей: <b>{total_users}</b>\n'
+    text += f'✅ Активных подписок: <b>{active_subscriptions}</b>\n'
+    text += f'📝 Всего записей о крестиках: <b>{total_entries}</b>\n'
+    text += f'🖼️ Всего проектов: <b>{total_projects}</b>\n\n'
+    
+    if total_users <= 20:
+        # Если пользователей немного, показываем ID
+        text += '<b>ID пользователей:</b>\n'
+        for i in range(0, len(user_ids), 10):
+            batch = user_ids[i:i+10]
+            text += ' '.join(f'<code>{uid}</code>' for uid in batch) + '\n'
+    else:
+        # Если много, показываем только первые 10
+        text += f'<b>Первые 10 ID:</b>\n'
+        text += ' '.join(f'<code>{uid}</code>' for uid in user_ids[:10]) + '\n'
+        text += f'<i>... и еще {total_users - 10} пользователей</i>'
     
     await message.answer(text, parse_mode='HTML')
 
 @router.callback_query(F.data == "main_menu")
 async def callback_main_menu(callback: CallbackQuery):
-    await callback.answer()
+    await safe_answer_callback(callback)
     text = (
         '🧵 <b>Дневник вышивальщицы</b>\n\n'
         'Выберите действие:'
@@ -142,21 +175,21 @@ async def callback_main_menu(callback: CallbackQuery):
 
 @router.callback_query(F.data == "add_stitches")
 async def callback_add_stitches(callback: CallbackQuery):
-    await callback.answer()
+    await safe_answer_callback(callback)
     await add_stitches_dialog(callback.message, callback.from_user.id)
 
 @router.callback_query(F.data == "my_projects")
 async def callback_projects(callback: CallbackQuery):
-    await callback.answer()
+    await safe_answer_callback(callback)
     await show_projects(callback.message, callback.from_user.id)
 
 @router.callback_query(F.data == "add_project")
 async def callback_add_project(callback: CallbackQuery):
-    await callback.answer()
+    await safe_answer_callback(callback)
     await add_project_dialog(callback.message, callback.from_user.id)
 
 @router.callback_query(F.data == "history")
 async def callback_history(callback: CallbackQuery):
-    await callback.answer()
+    await safe_answer_callback(callback)
     await show_history(callback.message, callback.from_user.id)
 

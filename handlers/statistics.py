@@ -4,6 +4,7 @@ from datetime import datetime
 from collections import defaultdict
 from data.storage import get_entries, format_number
 from handlers.keyboards import get_back_keyboard
+from utils import safe_answer_callback
 
 router = Router()
 
@@ -35,11 +36,11 @@ async def show_statistics(message: Message, user_id: int):
     best_day_date = None
     
     # Лучший месяц
-    month_stats = defaultdict(int)
+    month_stats = defaultdict(float)
     for entry in entries:
         entry_date = datetime.strptime(entry['date'], '%Y-%m-%d')
         month_key = f"{entry_date.year}-{entry_date.month:02d}"
-        month_stats[month_key] += entry.get('count', 0)
+        month_stats[month_key] += float(entry.get('count', 0))
     
     best_month = None
     best_month_count = 0
@@ -49,13 +50,13 @@ async def show_statistics(message: Message, user_id: int):
         best_month = best_month[0]
     
     # Самый продуктивный день недели
-    weekday_stats = defaultdict(int)
+    weekday_stats = defaultdict(float)
     weekday_names = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье']
     
     for entry in entries:
         entry_date = datetime.strptime(entry['date'], '%Y-%m-%d')
         weekday = entry_date.weekday()  # 0 = понедельник
-        weekday_stats[weekday] += entry.get('count', 0)
+        weekday_stats[weekday] += float(entry.get('count', 0))
     
     best_weekday = None
     best_weekday_count = 0
@@ -66,7 +67,7 @@ async def show_statistics(message: Message, user_id: int):
     
     # Рекорды
     for entry in entries:
-        count = entry.get('count', 0)
+        count = float(entry.get('count', 0))
         if count > best_day_count:
             best_day_count = count
             best_day_date = entry['date']
@@ -118,5 +119,5 @@ async def show_statistics(message: Message, user_id: int):
 
 @router.callback_query(F.data == "statistics")
 async def callback_statistics(callback: CallbackQuery):
-    await callback.answer()
+    await safe_answer_callback(callback)
     await show_statistics(callback.message, callback.from_user.id)
