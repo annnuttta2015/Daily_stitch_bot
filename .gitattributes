@@ -1,0 +1,34 @@
+# Автоматически определять текстовые файлы
+* text=auto
+
+# Python файлы - всегда LF в репозитории
+*.py text eol=lf
+*.pyw text eol=lf
+
+# Конфигурационные файлы
+*.json text eol=lf
+*.env text eol=lf
+*.gitignore text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.toml text eol=lf
+*.ini text eol=lf
+*.cfg text eol=lf
+
+# Shell скрипты
+*.sh text eol=lf
+*.bash text eol=lf
+
+# Бинарные файлы (не конвертировать)
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.tar binary
+*.gz binary
+
