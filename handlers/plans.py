@@ -36,13 +36,32 @@ async def show_plans(message: Message, user_id: int):
         target = plan.get('targetCount', 0)
         target_date = plan.get('targetDate', '')
         
-        # Считаем прогресс
+        # Считаем прогресс - только записи после создания плана
         entries = get_entries(user_id)
+        plan_created_at = plan.get('createdAt', '')
         hashtag = plan.get('hashtag')
+        
         if hashtag:
-            plan_entries = [e for e in entries if e.get('hashtag') == hashtag]
+            # Фильтруем по хэштегу и дате создания плана
+            if plan_created_at:
+                plan_entries = [
+                    e for e in entries 
+                    if e.get('hashtag') == hashtag 
+                    and e.get('date', '') >= plan_created_at
+                ]
+            else:
+                # Для старых планов без createdAt считаем все записи
+                plan_entries = [e for e in entries if e.get('hashtag') == hashtag]
         else:
-            plan_entries = entries
+            # Фильтруем только по дате создания плана
+            if plan_created_at:
+                plan_entries = [
+                    e for e in entries 
+                    if e.get('date', '') >= plan_created_at
+                ]
+            else:
+                # Для старых планов без createdAt считаем все записи
+                plan_entries = entries
         
         current = sum(e.get('count', 0) for e in plan_entries)
         progress = (current / target * 100) if target > 0 else 0
@@ -191,13 +210,32 @@ async def show_plan(message: Message, user_id: int, plan_id: str):
         await message.answer('❌ План не найден', reply_markup=get_back_keyboard())
         return
     
-    # Считаем прогресс
+    # Считаем прогресс - только записи после создания плана
     entries = get_entries(user_id)
+    plan_created_at = plan.get('createdAt', '')
     hashtag = plan.get('hashtag')
+    
     if hashtag:
-        plan_entries = [e for e in entries if e.get('hashtag') == hashtag]
+        # Фильтруем по хэштегу и дате создания плана
+        if plan_created_at:
+            plan_entries = [
+                e for e in entries 
+                if e.get('hashtag') == hashtag 
+                and e.get('date', '') >= plan_created_at
+            ]
+        else:
+            # Для старых планов без createdAt считаем все записи
+            plan_entries = [e for e in entries if e.get('hashtag') == hashtag]
     else:
-        plan_entries = entries
+        # Фильтруем только по дате создания плана
+        if plan_created_at:
+            plan_entries = [
+                e for e in entries 
+                if e.get('date', '') >= plan_created_at
+            ]
+        else:
+            # Для старых планов без createdAt считаем все записи
+            plan_entries = entries
     
     current = sum(e.get('count', 0) for e in plan_entries)
     target = plan.get('targetCount', 0)
