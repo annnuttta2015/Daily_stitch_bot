@@ -10,6 +10,20 @@ router = Router()
 
 pending_plans = {}
 
+def get_plan_hashtag_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура для этапа добавления хэштега с кнопкой 'Пропустить'"""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text='⏭️ Пропустить', callback_data='plan_skip_hashtag')],
+        [InlineKeyboardButton(text='🔙 Главное меню', callback_data='main_menu')]
+    ])
+
+def get_plan_date_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура для этапа добавления даты с кнопкой 'Пропустить'"""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text='⏭️ Пропустить', callback_data='plan_skip_date')],
+        [InlineKeyboardButton(text='🔙 Главное меню', callback_data='main_menu')]
+    ])
+
 async def show_plans(message: Message, user_id: int):
     """Показать список планов"""
     plans = get_plans(user_id)
@@ -131,8 +145,8 @@ async def process_plan_message(message: Message, user_id: int):
             state['step'] = 'hashtag'
             await message.answer(
                 f'✅ Цель: {format_number(target)} крестиков\n\n'
-                'Введите хэштег для отслеживания (или "пропустить"):',
-                reply_markup=get_back_keyboard()
+                'Введите хэштег для отслеживания или нажмите кнопку "Пропустить":',
+                reply_markup=get_plan_hashtag_keyboard()
             )
             return True
         except ValueError:
@@ -148,12 +162,12 @@ async def process_plan_message(message: Message, user_id: int):
         
         state['hashtag'] = hashtag
         state['step'] = 'date'
-        date_hint = "\n\n💡 Введите дату цели (ДД.ММ.ГГГГ) или 'пропустить'"
+        date_hint = "\n\n💡 Введите дату цели (ДД.ММ.ГГГГ) или нажмите кнопку 'Пропустить'"
         if hashtag:
             date_hint += f"\nХэштег: #{hashtag}"
         await message.answer(
             'Введите дату цели:' + date_hint,
-            reply_markup=get_back_keyboard()
+            reply_markup=get_plan_date_keyboard()
         )
         return True
     
@@ -166,7 +180,7 @@ async def process_plan_message(message: Message, user_id: int):
                 date_obj = parser.parse(text, dayfirst=True)
                 target_date = date_obj.strftime('%Y-%m-%d')
             except:
-                await message.answer('❌ Неверный формат даты. Используйте ДД.ММ.ГГГГ или "пропустить"', reply_markup=get_back_keyboard())
+                await message.answer('❌ Неверный формат даты. Используйте ДД.ММ.ГГГГ или нажмите кнопку "Пропустить"', reply_markup=get_plan_date_keyboard())
                 return True
         
         plan = {
@@ -294,6 +308,73 @@ async def callback_plan_add(callback: CallbackQuery):
             reply_markup=get_back_keyboard()
         )
     pending_plans[callback.from_user.id] = {'step': 'name'}
+
+@router.callback_query(F.data == "plan_skip_hashtag")
+async def callback_plan_skip_hashtag(callback: CallbackQuery):
+    """Обработчик кнопки 'Пропустить' при добавлении хэштега"""
+    await safe_answer_callback(callback)
+    user_id = callback.from_user.id
+    
+    if user_id not in pending_plans:
+        await callback.message.answer('❌ Нет активного процесса создания плана', reply_markup=get_back_keyboard())
+        return
+    
+    state = pending_plans[user_id]
+    if state.get('step') != 'hashtag':
+        await callback.message.answer('❌ Неверный этап процесса', reply_markup=get_back_keyboard())
+        return
+    
+    # Пропускаем хэштег
+    state['hashtag'] = None
+    state['step'] = 'date'
+    
+    await callback.message.answer(
+        'Введите дату цели:\n\n💡 Введите дату цели (ДД.ММ.ГГГГ) или нажмите кнопку "Пропустить"',
+        reply_markup=get_plan_date_keyboard()
+    )
+
+@router.callback_query(F.data == "plan_skip_date")
+async def callback_plan_skip_date(callback: CallbackQuery):
+    """Обработчик кнопки 'Пропустить' при добавлении даты"""
+    await safe_answer_callback(callback)
+    user_id = callback.from_user.id
+    
+    if user_id not in pending_plans:
+        await callback.message.answer('❌ Нет активного процесса создания плана', reply_markup=get_back_keyboard())
+        return
+    
+    state = pending_plans[user_id]
+    if state.get('step') != 'date':
+        await callback.message.answer('❌ Неверный этап процесса', reply_markup=get_back_keyboard())
+        return
+    
+    # Завершаем создание плана без даты
+    plan = {
+        'id': f"plan-{user_id}-{int(datetime.now().timestamp())}",
+        'name': state['name'],
+        'targetCount': state['target'],
+        'hashtag': state.get('hashtag'),
+        'targetDate': None,
+        'userId': user_id,
+        'createdAt': datetime.now().strftime('%Y-%m-%d')
+    }
+    
+    save_plan(plan)
+    
+    result_text = (
+        f'✅ <b>План создан!</b>\n\n'
+        f'Название: {plan["name"]}\n'
+        f'Цель: {format_number(plan["targetCount"])} крестиков'
+    )
+    if plan.get('hashtag'):
+        result_text += f'\nХэштег: #{plan["hashtag"]}'
+    
+    await callback.message.answer(
+        result_text,
+        parse_mode='HTML',
+        reply_markup=get_back_keyboard()
+    )
+    del pending_plans[user_id]
 
 @router.callback_query(F.data.startswith("plan_"))
 async def callback_plan(callback: CallbackQuery):

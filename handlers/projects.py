@@ -1,5 +1,5 @@
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from datetime import datetime
 from data.storage import get_projects, save_project, remove_project_photo, delete_project
 from handlers.keyboards import get_back_keyboard, get_project_navigation
@@ -13,6 +13,20 @@ os.makedirs(os.path.join(DATA_DIR, 'images'), exist_ok=True)
 
 pending_projects = {}
 pending_photo_updates = {}  # Для обновления фото существующих проектов
+
+def get_project_photo_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура для этапа добавления фото с кнопкой 'Пропустить'"""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text='⏭️ Пропустить', callback_data='project_skip_photo')],
+        [InlineKeyboardButton(text='🔙 Главное меню', callback_data='main_menu')]
+    ])
+
+def get_project_hashtag_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура для этапа добавления хэштега с кнопкой 'Пропустить'"""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text='⏭️ Пропустить', callback_data='project_skip_hashtag')],
+        [InlineKeyboardButton(text='🔙 Главное меню', callback_data='main_menu')]
+    ])
 
 async def add_project_dialog(message: Message, user_id: int):
     await message.answer(
@@ -39,8 +53,8 @@ async def process_project_message(message: Message, user_id: int):
         state['step'] = 'photo'
         await message.answer(
             f'✅ Название: {name}\n\n'
-            'Отправьте фото работы (или отправьте "пропустить"):',
-            reply_markup=get_back_keyboard()
+            'Отправьте фото работы или нажмите кнопку "Пропустить":',
+            reply_markup=get_project_photo_keyboard()
         )
         return True
     
@@ -51,8 +65,8 @@ async def process_project_message(message: Message, user_id: int):
             state['step'] = 'hashtag'
             await message.answer(
                 f'✅ Название: {state["name"]}\n\n'
-                'Введите хэштег для этой работы (или отправьте "пропустить"):',
-                reply_markup=get_back_keyboard()
+                'Введите хэштег для этой работы или нажмите кнопку "Пропустить":',
+                reply_markup=get_project_hashtag_keyboard()
             )
             return True
     
@@ -139,8 +153,8 @@ async def process_project_photo(message: Message, user_id: int, photo_file_id: s
         await message.answer(
             f'✅ Название: {state["name"]}\n'
             f'✅ Фото добавлено\n\n'
-            'Введите хэштег для этой работы (или отправьте "пропустить"):',
-            reply_markup=get_back_keyboard()
+            'Введите хэштег для этой работы или нажмите кнопку "Пропустить":',
+            reply_markup=get_project_hashtag_keyboard()
         )
         return True
     
@@ -213,13 +227,63 @@ async def show_project_by_index(message, user_id: int, index: int, is_edit: bool
         else:
             await message.answer(text, parse_mode='HTML', reply_markup=navigation)
 
-@router.callback_query(F.data.startswith("project_prev_"))
-async def callback_project_prev(callback: CallbackQuery):
+@router.callback_query(F.data == "project_skip_photo")
+async def callback_project_skip_photo(callback: CallbackQuery):
+    """Обработчик кнопки 'Пропустить' при добавлении фото"""
     await safe_answer_callback(callback)
     user_id = callback.from_user.id
-    index = int(callback.data.split('_')[-1])
-    if index > 0:
-        await show_project_by_index(callback.message, user_id, index - 1, is_edit=True)
+    
+    if user_id not in pending_projects:
+        await callback.message.answer('❌ Нет активного процесса добавления работы', reply_markup=get_back_keyboard())
+        return
+    
+    state = pending_projects[user_id]
+    if state.get('step') != 'photo':
+        await callback.message.answer('❌ Неверный этап процесса', reply_markup=get_back_keyboard())
+        return
+    
+    # Пропускаем фото, переходим к хэштегу
+    state['step'] = 'hashtag'
+    await callback.message.answer(
+        f'✅ Название: {state["name"]}\n\n'
+        'Введите хэштег для этой работы или нажмите кнопку "Пропустить":',
+        reply_markup=get_project_hashtag_keyboard()
+    )
+
+@router.callback_query(F.data == "project_skip_hashtag")
+async def callback_project_skip_hashtag(callback: CallbackQuery):
+    """Обработчик кнопки 'Пропустить' при добавлении хэштега"""
+    await safe_answer_callback(callback)
+    user_id = callback.from_user.id
+    
+    if user_id not in pending_projects:
+        await callback.message.answer('❌ Нет активного процесса добавления работы', reply_markup=get_back_keyboard())
+        return
+    
+    state = pending_projects[user_id]
+    if state.get('step') != 'hashtag':
+        await callback.message.answer('❌ Неверный этап процесса', reply_markup=get_back_keyboard())
+        return
+    
+    # Завершаем добавление проекта без хэштега
+    project = {
+        'id': f"project-{user_id}-{int(datetime.now().timestamp())}",
+        'name': state['name'],
+        'userId': user_id
+    }
+    if 'imageFileId' in state:
+        project['imageFileId'] = state['imageFileId']
+    
+    save_project(project)
+    
+    result_text = f'✅ <b>Работа добавлена!</b>\n\nНазвание: {project["name"]}'
+    
+    await callback.message.answer(
+        result_text,
+        parse_mode='HTML',
+        reply_markup=get_back_keyboard()
+    )
+    del pending_projects[user_id]
 
 @router.callback_query(F.data.startswith("project_next_"))
 async def callback_project_next(callback: CallbackQuery):
