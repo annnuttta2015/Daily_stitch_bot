@@ -65,6 +65,9 @@ def get_project_navigation(current_index: int, total: int, project_id: str = Non
         
         if photo_buttons:
             keyboard.append(photo_buttons)
+        
+        # Кнопка удаления проекта
+        keyboard.append([InlineKeyboardButton(text='🗑️ Удалить работу', callback_data=f'project_delete_{project_id}')])
     
     keyboard.append([InlineKeyboardButton(text='🔙 Главное меню', callback_data='main_menu')])
     return InlineKeyboardMarkup(inline_keyboard=keyboard)

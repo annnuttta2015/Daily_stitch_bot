@@ -108,7 +108,7 @@ async def process_plan_message(message: Message, user_id: int):
     if state['step'] == 'name':
         name = message.text.strip()
         if not name:
-            await message.answer('❌ Название не может быть пустым')
+            await message.answer('❌ Название не может быть пустым', reply_markup=get_back_keyboard())
             return True
         
         state['name'] = name
@@ -124,7 +124,7 @@ async def process_plan_message(message: Message, user_id: int):
         try:
             target = int(message.text)
             if target <= 0:
-                await message.answer('❌ Введите положительное число')
+                await message.answer('❌ Введите положительное число', reply_markup=get_back_keyboard())
                 return True
             
             state['target'] = target
@@ -136,7 +136,7 @@ async def process_plan_message(message: Message, user_id: int):
             )
             return True
         except ValueError:
-            await message.answer('❌ Введите число')
+            await message.answer('❌ Введите число', reply_markup=get_back_keyboard())
             return True
     
     elif state['step'] == 'hashtag':
@@ -166,7 +166,7 @@ async def process_plan_message(message: Message, user_id: int):
                 date_obj = parser.parse(text, dayfirst=True)
                 target_date = date_obj.strftime('%Y-%m-%d')
             except:
-                await message.answer('❌ Неверный формат даты. Используйте ДД.ММ.ГГГГ или "пропустить"')
+                await message.answer('❌ Неверный формат даты. Используйте ДД.ММ.ГГГГ или "пропустить"', reply_markup=get_back_keyboard())
                 return True
         
         plan = {

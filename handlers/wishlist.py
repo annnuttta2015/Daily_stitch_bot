@@ -9,6 +9,13 @@ router = Router()
 
 pending_wishlist = {}
 
+def get_wishlist_link_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура для этапа добавления ссылки с кнопкой 'Пропустить'"""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text='⏭️ Пропустить', callback_data='wishlist_skip_link')],
+        [InlineKeyboardButton(text='🔙 Главное меню', callback_data='main_menu')]
+    ])
+
 async def show_wishlist(message: Message, user_id: int):
     """Показать вишлист"""
     items = get_wishlist(user_id)
@@ -70,7 +77,7 @@ async def process_wishlist_message(message: Message, user_id: int):
     if state['step'] == 'name':
         name = message.text.strip()
         if not name:
-            await message.answer('❌ Название не может быть пустым')
+            await message.answer('❌ Название не может быть пустым', reply_markup=get_back_keyboard())
             return True
         
         state['name'] = name
@@ -78,9 +85,9 @@ async def process_wishlist_message(message: Message, user_id: int):
         await message.answer(
             f'✅ Название: {name}\n\n'
             '🔗 <b>Шаг 2: Добавить ссылку (опционально)</b>\n\n'
-            'Отправьте ссылку на товар или отправьте "пропустить"',
+            'Отправьте ссылку на товар или нажмите кнопку "Пропустить"',
             parse_mode='HTML',
-            reply_markup=get_back_keyboard()
+            reply_markup=get_wishlist_link_keyboard()
         )
         return True
     
@@ -91,6 +98,30 @@ async def process_wishlist_message(message: Message, user_id: int):
         # Проверяем, пропустил ли пользователь
         if link_lower == 'пропустить' or link_lower == 'skip' or not link_input:
             link = None
+            # Если пользователь пропустил, сразу завершаем процесс
+            item = {
+                'id': f"wishlist-{user_id}-{int(datetime.now().timestamp())}",
+                'name': state['name'],
+                'userId': user_id,
+                'createdAt': datetime.now().strftime('%Y-%m-%d'),
+                'completed': False
+            }
+            
+            add_to_wishlist(item)
+            
+            result_text = (
+                f'✅ <b>Добавлено в вишлист!</b>\n\n'
+                f'Название: {state["name"]}'
+            )
+            
+            await message.answer(
+                result_text,
+                parse_mode='HTML',
+                reply_markup=get_back_keyboard()
+            )
+            # Важно: очищаем состояние после завершения
+            del pending_wishlist[user_id]
+            return True
         else:
             # Сохраняем оригинальную ссылку (без .lower())
             link = link_input
@@ -105,38 +136,40 @@ async def process_wishlist_message(message: Message, user_id: int):
                     # Если не похоже на ссылку, спрашиваем еще раз
                     await message.answer(
                         '❌ Неверный формат ссылки.\n\n'
-                        'Отправьте ссылку (например: https://ozon.ru/...) или "пропустить"',
-                        reply_markup=get_back_keyboard()
+                        'Отправьте ссылку (например: https://ozon.ru/...) или нажмите кнопку "Пропустить"',
+                        reply_markup=get_wishlist_link_keyboard()
                     )
                     return True
-        
-        item = {
-            'id': f"wishlist-{user_id}-{int(datetime.now().timestamp())}",
-            'name': state['name'],
-            'userId': user_id,
-            'createdAt': datetime.now().strftime('%Y-%m-%d'),
-            'completed': False
-        }
-        
-        if link:
-            item['link'] = link
-        
-        add_to_wishlist(item)
-        
-        result_text = (
-            f'✅ <b>Добавлено в вишлист!</b>\n\n'
-            f'Название: {state["name"]}'
-        )
-        if link:
-            result_text += f'\n🔗 Ссылка: {link}'
-        
-        await message.answer(
-            result_text,
-            parse_mode='HTML',
-            reply_markup=get_back_keyboard()
-        )
-        del pending_wishlist[user_id]
-        return True
+            
+            # Если ссылка валидна, сохраняем элемент
+            item = {
+                'id': f"wishlist-{user_id}-{int(datetime.now().timestamp())}",
+                'name': state['name'],
+                'userId': user_id,
+                'createdAt': datetime.now().strftime('%Y-%m-%d'),
+                'completed': False
+            }
+            
+            if link:
+                item['link'] = link
+            
+            add_to_wishlist(item)
+            
+            result_text = (
+                f'✅ <b>Добавлено в вишлист!</b>\n\n'
+                f'Название: {state["name"]}'
+            )
+            if link:
+                result_text += f'\n🔗 Ссылка: {link}'
+            
+            await message.answer(
+                result_text,
+                parse_mode='HTML',
+                reply_markup=get_back_keyboard()
+            )
+            # Важно: очищаем состояние после завершения
+            del pending_wishlist[user_id]
+            return True
     
     return False
 
@@ -240,6 +273,52 @@ async def callback_wishlist_add(callback: CallbackQuery):
             reply_markup=get_back_keyboard()
         )
     pending_wishlist[callback.from_user.id] = {'step': 'name'}
+
+@router.callback_query(F.data == "wishlist_skip_link")
+async def callback_wishlist_skip_link(callback: CallbackQuery):
+    """Обработчик кнопки 'Пропустить' при добавлении ссылки"""
+    await safe_answer_callback(callback)
+    user_id = callback.from_user.id
+    
+    # Проверяем, что пользователь находится на этапе добавления ссылки
+    if user_id not in pending_wishlist:
+        await callback.message.answer(
+            '❌ Нет активного процесса добавления в вишлист',
+            reply_markup=get_back_keyboard()
+        )
+        return
+    
+    state = pending_wishlist[user_id]
+    if state.get('step') != 'link':
+        await callback.message.answer(
+            '❌ Неверный этап процесса',
+            reply_markup=get_back_keyboard()
+        )
+        return
+    
+    # Завершаем процесс без ссылки
+    item = {
+        'id': f"wishlist-{user_id}-{int(datetime.now().timestamp())}",
+        'name': state['name'],
+        'userId': user_id,
+        'createdAt': datetime.now().strftime('%Y-%m-%d'),
+        'completed': False
+    }
+    
+    add_to_wishlist(item)
+    
+    result_text = (
+        f'✅ <b>Добавлено в вишлист!</b>\n\n'
+        f'Название: {state["name"]}'
+    )
+    
+    await callback.message.answer(
+        result_text,
+        parse_mode='HTML',
+        reply_markup=get_back_keyboard()
+    )
+    # Очищаем состояние после завершения
+    del pending_wishlist[user_id]
 
 @router.callback_query(F.data.startswith("wishlist_item_"))
 async def callback_wishlist_item(callback: CallbackQuery):

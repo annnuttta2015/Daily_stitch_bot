@@ -68,7 +68,7 @@ async def process_entry_message(message: Message, user_id: int):
                     logger.info(f"[ENTRIES] Распарсена дата: {date}")
                 except Exception as e:
                     logger.warning(f"[ENTRIES] Ошибка парсинга даты: {e}, text='{message.text}'")
-                    await message.answer('❌ Неверный формат даты. Используйте ДД.ММ.ГГГГ или нажмите кнопку "📅 Сегодня"')
+                    await message.answer('❌ Неверный формат даты. Используйте ДД.ММ.ГГГГ или нажмите кнопку "📅 Сегодня"', reply_markup=get_back_keyboard())
                     return True
             
             state['date'] = date
@@ -169,7 +169,7 @@ async def process_entry_message(message: Message, user_id: int):
             # Извлекаем хэштег (убираем # если есть)
             hashtag = text.lstrip('#').strip()
             if not hashtag:
-                await message.answer('❌ Хэштег не может быть пустым. Нажмите "Пропустить" если не нужен.')
+                await message.answer('❌ Хэштег не может быть пустым. Нажмите "Пропустить" если не нужен.', reply_markup=get_back_keyboard())
                 return True
         
         # Сохраняем запись (с хэштегом или без)

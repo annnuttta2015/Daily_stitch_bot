@@ -293,6 +293,18 @@ def remove_project_photo(project_id: str, user_id: int):
             return True
     return False
 
+def delete_project(project_id: str, user_id: int) -> bool:
+    """Удалить проект"""
+    projects = get_projects()
+    original_count = len(projects)
+    projects = [p for p in projects if not (p.get('id') == project_id and p.get('userId') == user_id)]
+    
+    if len(projects) < original_count:
+        with open(PROJECTS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(projects, f, ensure_ascii=False, indent=2)
+        return True
+    return False
+
 def delete_all_user_data(user_id: int):
     """Удалить все данные пользователя (ID остается в списке для статистики)"""
     # Удаляем записи

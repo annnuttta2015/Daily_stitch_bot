@@ -1,7 +1,7 @@
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from datetime import datetime
-from data.storage import get_projects, save_project, remove_project_photo
+from data.storage import get_projects, save_project, remove_project_photo, delete_project
 from handlers.keyboards import get_back_keyboard, get_project_navigation
 from utils import safe_answer_callback
 import os
@@ -32,7 +32,7 @@ async def process_project_message(message: Message, user_id: int):
     if state['step'] == 'name':
         name = message.text.strip()
         if not name:
-            await message.answer('❌ Название не может быть пустым')
+            await message.answer('❌ Название не может быть пустым', reply_markup=get_back_keyboard())
             return True
         
         state['name'] = name
@@ -293,6 +293,54 @@ async def callback_delete_project_photo(callback: CallbackQuery):
             await show_project_by_index(callback.message, user_id, project_index, is_edit=False)
     else:
         await callback.message.answer('❌ Не удалось удалить фото', reply_markup=get_back_keyboard())
+
+@router.callback_query(F.data.startswith("project_delete_"))
+async def callback_delete_project(callback: CallbackQuery):
+    """Обработчик удаления проекта"""
+    await safe_answer_callback(callback)
+    user_id = callback.from_user.id
+    
+    # Пропускаем, если это удаление фото
+    if callback.data.startswith("project_delete_photo_"):
+        return
+    
+    project_id = callback.data.replace("project_delete_", "")
+    
+    # Проверяем, что проект существует и принадлежит пользователю
+    projects = get_projects(user_id)
+    project = next((p for p in projects if p.get('id') == project_id), None)
+    
+    if not project:
+        await callback.message.answer('❌ Проект не найден', reply_markup=get_back_keyboard())
+        return
+    
+    # Удаляем проект
+    if delete_project(project_id, user_id):
+        project_name = project.get('name', 'Работа')
+        
+        # Пытаемся удалить сообщение с проектом
+        try:
+            if callback.message.photo:
+                await callback.message.delete()
+            else:
+                await callback.message.delete()
+        except:
+            pass
+        
+        # Показываем обновленный список проектов
+        projects_list = get_projects(user_id)
+        if projects_list:
+            # Показываем первый проект из списка
+            projects_list.reverse()
+            await show_project_by_index(callback.message, user_id, 0, is_edit=False)
+        else:
+            # Если проектов не осталось, показываем сообщение
+            await callback.message.answer(
+                f'✅ Работа "{project_name}" удалена\n\n📝 У вас пока нет работ.',
+                reply_markup=get_back_keyboard()
+            )
+    else:
+        await callback.message.answer('❌ Не удалось удалить работу', reply_markup=get_back_keyboard())
 
 def clear_pending_project(user_id: int):
     if user_id in pending_projects:

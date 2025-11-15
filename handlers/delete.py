@@ -87,7 +87,7 @@ async def process_delete_message(message: Message, user_id: int):
                 date_obj = parser.parse(message.text, dayfirst=True)
                 date = date_obj.strftime('%Y-%m-%d')
             except:
-                await message.answer('❌ Неверный формат даты. Используйте ДД.ММ.ГГГГ или "сегодня"')
+                await message.answer('❌ Неверный формат даты. Используйте ДД.ММ.ГГГГ или "сегодня"', reply_markup=get_back_keyboard())
                 return True
         
         # Проверяем, есть ли запись за эту дату

@@ -70,7 +70,7 @@ async def process_note_message(message: Message, user_id: int):
     if state['step'] == 'title':
         title = message.text.strip()
         if not title:
-            await message.answer('❌ Название не может быть пустым')
+            await message.answer('❌ Название не может быть пустым', reply_markup=get_back_keyboard())
             return True
         
         state['title'] = title
@@ -87,7 +87,7 @@ async def process_note_message(message: Message, user_id: int):
     elif state['step'] == 'text':
         text = message.text.strip()
         if not text:
-            await message.answer('❌ Текст не может быть пустым')
+            await message.answer('❌ Текст не может быть пустым', reply_markup=get_back_keyboard())
             return True
         
         note = {
