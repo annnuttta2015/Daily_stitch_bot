@@ -111,7 +111,7 @@ def save_subscription(user_id: int, subscription_data: Dict):
         logger.error(f"save_subscription: ошибка при сохранении файла: {e}", exc_info=True)
         raise
 
-def grant_access(user_id: int, days: int = 30):
+def grant_access(user_id: int, days: int = 30, is_trial: bool = False):
     """Выдать доступ пользователю на указанное количество дней"""
     import logging
     logger = logging.getLogger(__name__)
@@ -125,7 +125,11 @@ def grant_access(user_id: int, days: int = 30):
         'invoicePayload': f'granted_{int(datetime.now().timestamp())}'
     }
     
-    logger.info(f"grant_access: выдача доступа user_id={user_id}, days={days}, expires_at={expires_at.isoformat()}")
+    # Если это пробная подписка, добавляем метку
+    if is_trial:
+        subscription_data['isTrial'] = True
+    
+    logger.info(f"grant_access: выдача доступа user_id={user_id}, days={days}, is_trial={is_trial}, expires_at={expires_at.isoformat()}")
     save_subscription(user_id, subscription_data)
     logger.info(f"grant_access: доступ успешно выдан для user_id={user_id}")
     

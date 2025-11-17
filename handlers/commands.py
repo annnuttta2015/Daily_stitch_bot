@@ -1,7 +1,7 @@
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command
-from data.storage import is_subscribed, get_all_user_ids
+from data.storage import is_subscribed, get_all_user_ids, get_user_subscription, grant_access, save_user_id
 from handlers.entries import add_stitches_dialog, show_history
 from handlers.statistics import show_statistics
 from handlers.projects import show_projects, add_project_dialog
@@ -21,8 +21,40 @@ async def cmd_start(message: Message):
     
     logger.info(f"[COMMANDS] /start вызван для user_id={user_id}, TEST_MODE={TEST_MODE}")
     
+    # Сохраняем ID пользователя (если его еще нет)
+    save_user_id(user_id)
+    
+    # Проверяем, первый ли раз пользователь запускает бота
+    existing_subscription = get_user_subscription(user_id)
+    is_first_time = existing_subscription is None
+    
     subscription_status = is_subscribed(user_id)
-    logger.info(f"[COMMANDS] is_subscribed({user_id}) = {subscription_status}")
+    logger.info(f"[COMMANDS] is_subscribed({user_id}) = {subscription_status}, is_first_time={is_first_time}")
+    
+    # Если первый раз и не в тестовом режиме - выдаем 3 дня пробной подписки
+    if is_first_time and not TEST_MODE:
+        try:
+            expires_at = grant_access(user_id, days=3, is_trial=True)
+            logger.info(f"[COMMANDS] Выдана пробная подписка на 3 дня для user_id={user_id}, expires_at={expires_at}")
+            
+            # Отправляем сообщение о пробной подписке
+            await message.answer(
+                '🎉 <b>Добро пожаловать!</b>\n\n'
+                'Вам предоставлена <b>пробная подписка на 3 дня</b>!\n\n'
+                f'Подписка действует до: {expires_at.strftime("%d.%m.%Y")}\n\n'
+                'Попробуйте все функции бота:\n'
+                '• Добавление крестиков\n'
+                '• Статистика и прогресс\n'
+                '• Проекты с фото\n'
+                '• Челленджи и планы\n'
+                '• И многое другое!\n\n'
+                'После окончания пробного периода для продолжения использования потребуется оформление подписки (99₽/мес).',
+                parse_mode='HTML',
+                reply_markup=get_main_menu()
+            )
+            return
+        except Exception as e:
+            logger.error(f"[COMMANDS] Ошибка при выдаче пробной подписки для user_id={user_id}: {e}", exc_info=True)
     
     if not TEST_MODE and not subscription_status:
         # Показываем информацию о подписке
