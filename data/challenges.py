@@ -147,31 +147,45 @@ def check_challenge_progress(user_id: int, challenge_id: str, user_challenge: Di
         }
     
     elif challenge_data['type'] == 'daily_minimum':
-        # Проверка минимума каждый день
-        period_end = start_date + timedelta(days=challenge_data['period_days'])
-        days_completed = 0
+        # Проверка минимума каждый день (7 дней подряд с минимумом 300 крестиков)
+        # Если в какой-то день меньше 300, последовательность обнуляется
         days_with_entries = {}
         
+        # Собираем количество крестиков по дням с момента начала челленджа
         for entry in entries:
             try:
                 entry_date = datetime.strptime(entry.get('date', ''), '%Y-%m-%d').date()
-                if start_date.date() <= entry_date <= min(period_end.date(), today):
+                if start_date.date() <= entry_date <= today:
                     if entry_date not in days_with_entries:
                         days_with_entries[entry_date] = 0.0
                     days_with_entries[entry_date] += float(entry.get('count', 0))
             except:
                 continue
         
-        # Проверяем каждый день периода
-        current_date = start_date.date()
-        while current_date <= min(period_end.date(), today):
+        # Ищем максимальную последовательность дней подряд с >= 300, идущую от сегодня назад
+        days_completed = 0
+        current_date = today
+        check_start_date = max(start_date.date(), today - timedelta(days=challenge_data['period_days'] * 2))
+        
+        # Идем от сегодня назад, считая последовательные дни с >= 300
+        while current_date >= check_start_date:
+            # Проверяем, есть ли запись за этот день и достаточно ли крестиков
             if current_date in days_with_entries and days_with_entries[current_date] >= challenge_data['target']:
                 days_completed += 1
-            current_date += timedelta(days=1)
+                if days_completed >= challenge_data['period_days']:
+                    # Найдена последовательность из нужного количества дней
+                    break
+                current_date -= timedelta(days=1)
+            else:
+                # День без достаточного количества крестиков - обнуляем счетчик
+                if days_completed > 0:
+                    # Если уже была последовательность, она прервалась
+                    days_completed = 0
+                current_date -= timedelta(days=1)
         
-        progress = (days_completed / challenge_data['period_days']) * 100
+        progress = (days_completed / challenge_data['period_days']) * 100 if challenge_data['period_days'] > 0 else 0
         completed = days_completed >= challenge_data['period_days']
-        days_left = max(0, (period_end.date() - today).days)
+        days_left = max(0, challenge_data['period_days'] - days_completed)
         
         return {
             'current': days_completed,
