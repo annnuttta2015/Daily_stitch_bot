@@ -5,6 +5,7 @@ from data.storage import get_projects, save_project, remove_project_photo, delet
 from handlers.keyboards import get_back_keyboard, get_project_navigation
 from utils import safe_answer_callback
 import os
+import html
 
 router = Router()
 
@@ -178,7 +179,9 @@ async def show_project_by_index(message, user_id: int, index: int, is_edit: bool
         return
     
     project = projects_list[index]
-    text = f'<b>📸 {project["name"]}</b>\n\n'
+    # Экранируем HTML в названии проекта, чтобы избежать проблем с отображением тегов
+    project_name = html.escape(project["name"])
+    text = f'<b>📸 {project_name}</b>\n\n'
     
     if project.get('hashtag'):
         text += f"#️⃣ Хэштег: #{project['hashtag']}\n"
@@ -285,8 +288,19 @@ async def callback_project_skip_hashtag(callback: CallbackQuery):
     )
     del pending_projects[user_id]
 
+@router.callback_query(F.data.startswith("project_prev_"))
+async def callback_project_prev(callback: CallbackQuery):
+    """Обработчик кнопки 'Назад' для навигации по проектам"""
+    await safe_answer_callback(callback)
+    user_id = callback.from_user.id
+    index = int(callback.data.split('_')[-1])
+    projects_list = get_projects(user_id)
+    if index > 0:
+        await show_project_by_index(callback.message, user_id, index - 1, is_edit=True)
+
 @router.callback_query(F.data.startswith("project_next_"))
 async def callback_project_next(callback: CallbackQuery):
+    """Обработчик кнопки 'Вперед' для навигации по проектам"""
     await safe_answer_callback(callback)
     user_id = callback.from_user.id
     index = int(callback.data.split('_')[-1])
@@ -314,9 +328,12 @@ async def callback_change_project_photo(callback: CallbackQuery):
     has_photo = bool(project.get('imageFileId'))
     action_text = "изменить" if has_photo else "добавить"
     
+    # Экранируем HTML в названии проекта
+    project_name = html.escape(project.get("name", ""))
+    
     await callback.message.answer(
         f'📸 <b>{action_text.capitalize()} фото</b>\n\n'
-        f'Проект: <b>{project.get("name")}</b>\n\n'
+        f'Проект: <b>{project_name}</b>\n\n'
         'Отправьте новое фото для этой работы:',
         parse_mode='HTML',
         reply_markup=get_back_keyboard()
