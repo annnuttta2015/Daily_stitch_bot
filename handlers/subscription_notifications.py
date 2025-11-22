@@ -149,6 +149,11 @@ async def send_expired_notification(bot: Bot, user_id: int, expires_at: datetime
             reply_markup=keyboard
         )
         
+        # Если это пробная подписка, проверяем и отправляем опрос
+        if is_trial:
+            from handlers.feedback import check_and_send_feedback
+            await check_and_send_feedback(bot, user_id)
+        
     except Exception as e:
         logger.error(f"[SUBSCRIPTION_NOTIFICATIONS] Ошибка при отправке уведомления об истечении для user_id={user_id}: {e}", exc_info=True)
 

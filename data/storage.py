@@ -175,15 +175,30 @@ def is_subscribed(user_id: int) -> bool:
     return is_active
 
 # === Пользователи ===
+def _migrate_users_format(users_data):
+    """Мигрировать старый формат (список ID) в новый (список словарей)"""
+    if not users_data:
+        return []
+    
+    # Если первый элемент - число, значит старый формат
+    if users_data and isinstance(users_data[0], int):
+        return [{'userId': uid, 'feedback_given': False} for uid in users_data]
+    # Если уже новый формат, возвращаем как есть
+    return users_data
+
 def save_user_id(user_id: int):
     """Сохранить ID пользователя (если его еще нет в списке)"""
     users = []
     if os.path.exists(USERS_FILE):
         with open(USERS_FILE, 'r', encoding='utf-8') as f:
-            users = json.load(f)
+            users_data = json.load(f)
+            users = _migrate_users_format(users_data)
     
-    if user_id not in users:
-        users.append(user_id)
+    # Проверяем, есть ли уже такой пользователь
+    user_exists = any(u.get('userId') == user_id if isinstance(u, dict) else u == user_id for u in users)
+    
+    if not user_exists:
+        users.append({'userId': user_id, 'feedback_given': False})
         with open(USERS_FILE, 'w', encoding='utf-8') as f:
             json.dump(users, f, ensure_ascii=False, indent=2)
 
@@ -193,7 +208,57 @@ def get_all_user_ids() -> List[int]:
         return []
     
     with open(USERS_FILE, 'r', encoding='utf-8') as f:
-        return json.load(f)
+        users_data = json.load(f)
+        users = _migrate_users_format(users_data)
+        return [u.get('userId') if isinstance(u, dict) else u for u in users]
+
+def get_user_feedback_given(user_id: int) -> bool:
+    """Получить статус feedback_given для пользователя"""
+    if not os.path.exists(USERS_FILE):
+        return False
+    
+    with open(USERS_FILE, 'r', encoding='utf-8') as f:
+        users_data = json.load(f)
+        users = _migrate_users_format(users_data)
+        
+        for user in users:
+            user_id_val = user.get('userId') if isinstance(user, dict) else user
+            if user_id_val == user_id:
+                return user.get('feedback_given', False) if isinstance(user, dict) else False
+    
+    return False
+
+def set_user_feedback_given(user_id: int, value: bool = True):
+    """Установить feedback_given для пользователя"""
+    users = []
+    if os.path.exists(USERS_FILE):
+        with open(USERS_FILE, 'r', encoding='utf-8') as f:
+            users_data = json.load(f)
+            users = _migrate_users_format(users_data)
+            # Если была миграция, сохраняем новый формат
+            if users_data and isinstance(users_data[0], int):
+                with open(USERS_FILE, 'w', encoding='utf-8') as f:
+                    json.dump(users, f, ensure_ascii=False, indent=2)
+    
+    # Ищем пользователя и обновляем его
+    found = False
+    for i, user in enumerate(users):
+        user_id_val = user.get('userId') if isinstance(user, dict) else user
+        if user_id_val == user_id:
+            if isinstance(user, dict):
+                users[i]['feedback_given'] = value
+            else:
+                # Конвертируем старый формат в новый
+                users[i] = {'userId': user_id, 'feedback_given': value}
+            found = True
+            break
+    
+    # Если пользователь не найден, добавляем его
+    if not found:
+        users.append({'userId': user_id, 'feedback_given': value})
+    
+    with open(USERS_FILE, 'w', encoding='utf-8') as f:
+        json.dump(users, f, ensure_ascii=False, indent=2)
 
 # === Записи о крестиках ===
 def get_entries(user_id: Optional[int] = None) -> List[Dict]:

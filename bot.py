@@ -8,7 +8,7 @@ from aiogram.types import Message
 from aiogram.filters import Command
 from config import BOT_TOKEN
 from data.storage import is_subscribed
-from handlers import commands, entries, statistics, projects, delete, hashtags, wishlist, notes, plans, calendar, challenges, subscriptions, period_comparison, export, admin
+from handlers import commands, entries, statistics, projects, delete, hashtags, wishlist, notes, plans, calendar, challenges, subscriptions, period_comparison, export, admin, feedback
 from handlers.keyboards import get_main_menu
 
 # Настройка логирования
@@ -64,6 +64,7 @@ dp.include_router(subscriptions.router)
 dp.include_router(period_comparison.router)
 dp.include_router(export.router)
 dp.include_router(admin.router)
+dp.include_router(feedback.router)
 
 # Обработка текстовых сообщений (для диалогов)
 @dp.message(lambda msg: msg.text and not msg.text.startswith('/'))
