@@ -6,6 +6,7 @@ from handlers.keyboards import get_back_keyboard, get_project_navigation
 from utils import safe_answer_callback
 import os
 import html
+import re
 
 router = Router()
 
@@ -49,6 +50,9 @@ async def process_project_message(message: Message, user_id: int):
         if not name:
             await message.answer('❌ Название не может быть пустым', reply_markup=get_back_keyboard())
             return True
+        
+        # Удаляем все HTML-теги из названия перед сохранением
+        name = re.sub(r'<[^>]+>', '', name)
         
         state['name'] = name
         state['step'] = 'photo'
@@ -179,8 +183,12 @@ async def show_project_by_index(message, user_id: int, index: int, is_edit: bool
         return
     
     project = projects_list[index]
-    # Экранируем HTML в названии проекта, чтобы избежать проблем с отображением тегов
-    project_name = html.escape(project["name"])
+    # Удаляем все HTML-теги из названия проекта и экранируем оставшийся текст
+    project_name_raw = project["name"]
+    # Удаляем все HTML-теги (например, <b>, </b>, <i>, </i> и т.д.)
+    project_name_clean = re.sub(r'<[^>]+>', '', project_name_raw)
+    # Экранируем оставшийся текст для безопасного отображения в HTML
+    project_name = html.escape(project_name_clean)
     text = f'<b>📸 {project_name}</b>\n\n'
     
     if project.get('hashtag'):
@@ -328,8 +336,10 @@ async def callback_change_project_photo(callback: CallbackQuery):
     has_photo = bool(project.get('imageFileId'))
     action_text = "изменить" if has_photo else "добавить"
     
-    # Экранируем HTML в названии проекта
-    project_name = html.escape(project.get("name", ""))
+    # Удаляем все HTML-теги из названия проекта и экранируем оставшийся текст
+    project_name_raw = project.get("name", "")
+    project_name_clean = re.sub(r'<[^>]+>', '', project_name_raw)
+    project_name = html.escape(project_name_clean)
     
     await callback.message.answer(
         f'📸 <b>{action_text.capitalize()} фото</b>\n\n'
