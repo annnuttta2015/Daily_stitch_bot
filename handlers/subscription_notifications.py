@@ -1,16 +1,46 @@
 """Модуль для уведомлений об истечении подписки"""
 import asyncio
 import logging
+import os
+import json
 from datetime import datetime, timedelta
 from aiogram import Bot
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from data.storage import get_user_subscription, get_all_user_ids
+from data.storage import get_user_subscription, get_all_user_ids, DATA_DIR
 
 logger = logging.getLogger(__name__)
 
+# Файл для хранения флагов уведомлений
+NOTIFICATION_FLAGS_FILE = os.path.join(DATA_DIR, 'notification_flags.json')
+
+def load_notification_flags():
+    """Загрузить флаги уведомлений из файла"""
+    if not os.path.exists(NOTIFICATION_FLAGS_FILE):
+        return {}
+    
+    try:
+        with open(NOTIFICATION_FLAGS_FILE, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            # Конвертируем ключи из строк в int
+            return {int(k): v for k, v in data.items()}
+    except Exception as e:
+        logger.error(f"[SUBSCRIPTION_NOTIFICATIONS] Ошибка при загрузке флагов уведомлений: {e}")
+        return {}
+
+def save_notification_flags(flags):
+    """Сохранить флаги уведомлений в файл"""
+    try:
+        with open(NOTIFICATION_FLAGS_FILE, 'w', encoding='utf-8') as f:
+            # Конвертируем ключи из int в строки для JSON
+            data = {str(k): v for k, v in flags.items()}
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.error(f"[SUBSCRIPTION_NOTIFICATIONS] Ошибка при сохранении флагов уведомлений: {e}")
+
 # Хранилище для отслеживания отправленных уведомлений
 # Формат: {user_id: {'3days': bool, 'expired': bool}}
-sent_notifications = {}
+# Загружаем из файла при старте
+sent_notifications = load_notification_flags()
 
 async def check_expiring_subscriptions(bot: Bot):
     """Проверка подписок, которые скоро истекают или истекли"""
@@ -50,6 +80,7 @@ async def check_expiring_subscriptions(bot: Bot):
                     if not sent_notifications[user_id]['expired']:
                         await send_expired_notification(bot, user_id, expires_at)
                         sent_notifications[user_id]['expired'] = True
+                        save_notification_flags(sent_notifications)
                         logger.info(f"[SUBSCRIPTION_NOTIFICATIONS] Отправлено уведомление об истечении для user_id={user_id}")
                 
                 # Проверяем, истекает ли подписка через 3 дня или меньше (но еще не истекла)
@@ -57,11 +88,13 @@ async def check_expiring_subscriptions(bot: Bot):
                     if not sent_notifications[user_id]['3days']:
                         await send_3days_notification(bot, user_id, expires_at)
                         sent_notifications[user_id]['3days'] = True
+                        save_notification_flags(sent_notifications)
                         logger.info(f"[SUBSCRIPTION_NOTIFICATIONS] Отправлено уведомление за 3 дня для user_id={user_id}")
                 
                 # Сбрасываем флаги, если подписка была продлена (больше чем на 3 дня)
                 if expires_at > three_days_later:
                     sent_notifications[user_id] = {'3days': False, 'expired': False}
+                    save_notification_flags(sent_notifications)
                     
             except Exception as e:
                 logger.error(f"[SUBSCRIPTION_NOTIFICATIONS] Ошибка при проверке подписки user_id={user_id}: {e}", exc_info=True)
@@ -178,5 +211,6 @@ def reset_notification_flags(user_id: int):
     """Сбросить флаги уведомлений для пользователя (вызывается при продлении подписки)"""
     if user_id in sent_notifications:
         sent_notifications[user_id] = {'3days': False, 'expired': False}
+        save_notification_flags(sent_notifications)
         logger.debug(f"[SUBSCRIPTION_NOTIFICATIONS] Сброшены флаги уведомлений для user_id={user_id}")
 
