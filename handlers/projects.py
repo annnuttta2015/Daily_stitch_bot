@@ -52,7 +52,7 @@ async def process_project_message(message: Message, user_id: int):
             return True
         
         # Удаляем все HTML-теги из названия перед сохранением
-        name = re.sub(r'<[^>]+>', '', name)
+        name = name.replace('<', '').replace('>', '').strip()
         
         state['name'] = name
         state['step'] = 'photo'
@@ -184,9 +184,10 @@ async def show_project_by_index(message, user_id: int, index: int, is_edit: bool
     
     project = projects_list[index]
     # Удаляем все HTML-теги из названия проекта и экранируем оставшийся текст
-    project_name_raw = project["name"]
-    # Удаляем все HTML-теги (например, <b>, </b>, <i>, </i> и т.д.)
-    project_name_clean = re.sub(r'<[^>]+>', '', project_name_raw)
+    project_name_raw = str(project["name"])
+    # Простой и надежный способ: удаляем все символы < и >, затем экранируем
+    # Это гарантированно удалит все HTML-теги, включая неполные типа <\b>
+    project_name_clean = project_name_raw.replace('<', '').replace('>', '').strip()
     # Экранируем оставшийся текст для безопасного отображения в HTML
     project_name = html.escape(project_name_clean)
     text = f'<b>📸 {project_name}</b>\n\n'
@@ -211,7 +212,7 @@ async def show_project_by_index(message, user_id: int, index: int, is_edit: bool
             from aiogram.types import InputMediaPhoto
             try:
                 await message.edit_media(
-                    media=InputMediaPhoto(media=project['imageFileId'], caption=text),
+                    media=InputMediaPhoto(media=project['imageFileId'], caption=text, parse_mode='HTML'),
                     reply_markup=navigation
                 )
             except:
@@ -337,8 +338,8 @@ async def callback_change_project_photo(callback: CallbackQuery):
     action_text = "изменить" if has_photo else "добавить"
     
     # Удаляем все HTML-теги из названия проекта и экранируем оставшийся текст
-    project_name_raw = project.get("name", "")
-    project_name_clean = re.sub(r'<[^>]+>', '', project_name_raw)
+    project_name_raw = str(project.get("name", ""))
+    project_name_clean = project_name_raw.replace('<', '').replace('>', '').strip()
     project_name = html.escape(project_name_clean)
     
     await callback.message.answer(
