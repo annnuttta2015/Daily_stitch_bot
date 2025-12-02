@@ -94,6 +94,19 @@ async def process_delete_message(message: Message, user_id: int):
         entries = get_entries(user_id)
         entry_for_date = [e for e in entries if e.get('date') == date]
         
+        # Если не найдено, пробуем найти запись с некорректной датой, которая может совпадать с введенным текстом
+        if not entry_for_date and text != 'сегодня' and text != 'today':
+            # Пробуем найти запись, где дата может быть в формате, который пользователь ввел
+            original_text = message.text.strip()
+            for e in entries:
+                entry_date = e.get('date', '')
+                # Проверяем прямое совпадение или совпадение после преобразования
+                if entry_date == original_text or entry_date == date:
+                    entry_for_date = [e]
+                    # Используем дату из записи для удаления
+                    date = entry_date
+                    break
+        
         if not entry_for_date:
             date_str = date_obj.strftime('%d.%m.%Y') if text != 'сегодня' else 'сегодня'
             await message.answer(
@@ -104,7 +117,22 @@ async def process_delete_message(message: Message, user_id: int):
             return True
         
         delete_entry_by_date(date, user_id)
-        date_str = datetime.strptime(date, '%Y-%m-%d').strftime('%d %B %Y')
+        
+        # Безопасное форматирование даты для отображения
+        try:
+            date_str = datetime.strptime(date, '%Y-%m-%d').strftime('%d %B %Y')
+        except (ValueError, TypeError):
+            # Если дата некорректная (например, 622-11-27), показываем в упрощенном формате
+            try:
+                # Пробуем разобрать дату вручную
+                parts = date.split('-')
+                if len(parts) == 3:
+                    date_str = f"{parts[2]}.{parts[1]}.{parts[0]}"
+                else:
+                    date_str = date.replace('-', '.')
+            except:
+                date_str = date
+        
         await message.answer(
             f'✅ <b>Запись удалена!</b>\n\n'
             f'Дата: {date_str}',

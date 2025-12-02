@@ -15,6 +15,23 @@ async def show_statistics(message: Message, user_id: int):
         entries = get_entries(user_id)
         logger.debug(f"[STATISTICS] Получено {len(entries)} записей для user_id={user_id}")
         
+        # Фильтруем только валидные записи с датой
+        valid_entries = []
+        for entry in entries:
+            if not entry.get('date'):
+                logger.warning(f"[STATISTICS] Пропущена запись без даты для user_id={user_id}: {entry}")
+                continue
+            try:
+                # Проверяем, что дата в правильном формате
+                datetime.strptime(entry['date'], '%Y-%m-%d')
+                valid_entries.append(entry)
+            except (ValueError, TypeError) as e:
+                logger.warning(f"[STATISTICS] Пропущена запись с некорректной датой для user_id={user_id}: дата='{entry.get('date')}', ошибка: {e}")
+                continue
+        
+        entries = valid_entries
+        logger.debug(f"[STATISTICS] После фильтрации осталось {len(entries)} валидных записей для user_id={user_id}")
+        
         today = datetime.now().date()
         today_str = today.strftime('%Y-%m-%d')
         
@@ -43,9 +60,13 @@ async def show_statistics(message: Message, user_id: int):
         # Лучший месяц
         month_stats = defaultdict(float)
         for entry in entries:
-            entry_date = datetime.strptime(entry['date'], '%Y-%m-%d')
-            month_key = f"{entry_date.year}-{entry_date.month:02d}"
-            month_stats[month_key] += float(entry.get('count', 0))
+            try:
+                entry_date = datetime.strptime(entry['date'], '%Y-%m-%d')
+                month_key = f"{entry_date.year}-{entry_date.month:02d}"
+                month_stats[month_key] += float(entry.get('count', 0))
+            except (ValueError, TypeError, KeyError) as e:
+                logger.warning(f"[STATISTICS] Ошибка при обработке записи для лучшего месяца: дата='{entry.get('date')}', ошибка: {e}")
+                continue
         
         best_month = None
         best_month_count = 0
@@ -59,9 +80,13 @@ async def show_statistics(message: Message, user_id: int):
         weekday_names = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье']
         
         for entry in entries:
-            entry_date = datetime.strptime(entry['date'], '%Y-%m-%d')
-            weekday = entry_date.weekday()  # 0 = понедельник
-            weekday_stats[weekday] += float(entry.get('count', 0))
+            try:
+                entry_date = datetime.strptime(entry['date'], '%Y-%m-%d')
+                weekday = entry_date.weekday()  # 0 = понедельник
+                weekday_stats[weekday] += float(entry.get('count', 0))
+            except (ValueError, TypeError, KeyError) as e:
+                logger.warning(f"[STATISTICS] Ошибка при обработке записи для дня недели: дата='{entry.get('date')}', ошибка: {e}")
+                continue
         
         best_weekday = None
         best_weekday_count = 0
@@ -72,13 +97,21 @@ async def show_statistics(message: Message, user_id: int):
         
         # Рекорды
         for entry in entries:
-            count = float(entry.get('count', 0))
-            if count > best_day_count:
-                best_day_count = count
-                best_day_date = entry['date']
+            try:
+                count = float(entry.get('count', 0))
+                if count > best_day_count:
+                    best_day_count = count
+                    best_day_date = entry['date']
+            except (ValueError, TypeError) as e:
+                logger.warning(f"[STATISTICS] Ошибка при обработке записи для рекордов: {entry}, ошибка: {e}")
+                continue
         
         if best_day_date:
-            best_day = datetime.strptime(best_day_date, '%Y-%m-%d').strftime('%d.%m.%Y')
+            try:
+                best_day = datetime.strptime(best_day_date, '%Y-%m-%d').strftime('%d.%m.%Y')
+            except (ValueError, TypeError) as e:
+                logger.warning(f"[STATISTICS] Ошибка при форматировании лучшего дня: {best_day_date}, ошибка: {e}")
+                best_day = None
         
         text = (
             '<b>📊 Статистика</b>\n\n'
@@ -98,10 +131,14 @@ async def show_statistics(message: Message, user_id: int):
             text += '🥇 Лучший день: нет данных\n'
         
         if best_month:
-            year, month = best_month.split('-')
-            month_name = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь',
-                         'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'][int(month) - 1]
-            text += f'📅 Лучший месяц: {format_number(best_month_count)} крестиков ({month_name} {year})\n'
+            try:
+                year, month = best_month.split('-')
+                month_name = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь',
+                             'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'][int(month) - 1]
+                text += f'📅 Лучший месяц: {format_number(best_month_count)} крестиков ({month_name} {year})\n'
+            except (ValueError, IndexError) as e:
+                logger.warning(f"[STATISTICS] Ошибка при форматировании лучшего месяца: {best_month}, ошибка: {e}")
+                text += '📅 Лучший месяц: нет данных\n'
         else:
             text += '📅 Лучший месяц: нет данных\n'
         
