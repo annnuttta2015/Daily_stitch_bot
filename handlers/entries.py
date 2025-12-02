@@ -64,6 +64,18 @@ async def process_entry_message(message: Message, user_id: int):
                 try:
                     # Пробуем распарсить дату
                     date_obj = parser.parse(message.text, dayfirst=True)
+                    
+                    # Валидация: проверяем, что год находится в разумных пределах
+                    current_year = datetime.now().year
+                    if date_obj.year < 1900 or date_obj.year > current_year + 1:
+                        logger.warning(f"[ENTRIES] Некорректный год в дате: {date_obj.year}, text='{message.text}'")
+                        await message.answer(
+                            f'❌ Некорректная дата. Год должен быть от 1900 до {current_year + 1}.\n\n'
+                            'Используйте ДД.ММ.ГГГГ или нажмите кнопку "📅 Сегодня"',
+                            reply_markup=get_back_keyboard()
+                        )
+                        return True
+                    
                     date = date_obj.strftime('%Y-%m-%d')
                     logger.info(f"[ENTRIES] Распарсена дата: {date}")
                 except Exception as e:
@@ -176,10 +188,14 @@ async def process_entry_message(message: Message, user_id: int):
         add_count_to_date(state['date'], state['count'], user_id, hashtag)
         
         # Используем безопасное форматирование даты
-        entry_date = datetime.strptime(state['date'], '%Y-%m-%d')
-        months_ru = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
-                     'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря']
-        date_str = f"{entry_date.day} {months_ru[entry_date.month - 1]} {entry_date.year}"
+        try:
+            entry_date = datetime.strptime(state['date'], '%Y-%m-%d')
+            months_ru = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+                         'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря']
+            date_str = f"{entry_date.day} {months_ru[entry_date.month - 1]} {entry_date.year}"
+        except (ValueError, TypeError):
+            # Если дата некорректная, показываем её как есть
+            date_str = state['date'].replace('-', '.')
         
         result_text = (
             f'✅ <b>Добавлено!</b>\n\n'
@@ -385,10 +401,14 @@ async def callback_entry_hashtag_skip(callback: CallbackQuery):
     add_count_to_date(state['date'], state['count'], user_id, None)
     
     # Используем безопасное форматирование даты
-    entry_date = datetime.strptime(state['date'], '%Y-%m-%d')
-    months_ru = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
-                 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря']
-    date_str = f"{entry_date.day} {months_ru[entry_date.month - 1]} {entry_date.year}"
+    try:
+        entry_date = datetime.strptime(state['date'], '%Y-%m-%d')
+        months_ru = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+                     'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря']
+        date_str = f"{entry_date.day} {months_ru[entry_date.month - 1]} {entry_date.year}"
+    except (ValueError, TypeError):
+        # Если дата некорректная, показываем её как есть
+        date_str = state['date'].replace('-', '.')
     
     result_text = (
         f'✅ <b>Добавлено!</b>\n\n'
