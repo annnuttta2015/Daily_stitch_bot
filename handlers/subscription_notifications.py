@@ -41,6 +41,7 @@ def save_notification_flags(flags):
 # Формат: {user_id: {'3days': bool, 'expired': bool}}
 # Загружаем из файла при старте
 sent_notifications = load_notification_flags()
+logger.info(f"[SUBSCRIPTION_NOTIFICATIONS] Загружено {len(sent_notifications)} записей о флагах уведомлений")
 
 async def check_expiring_subscriptions(bot: Bot):
     """Проверка подписок, которые скоро истекают или истекли"""
@@ -77,19 +78,36 @@ async def check_expiring_subscriptions(bot: Bot):
                 # Проверяем, истекла ли подписка
                 if expires_at < today:
                     # Подписка истекла
-                    if not sent_notifications[user_id]['expired']:
-                        await send_expired_notification(bot, user_id, expires_at)
-                        sent_notifications[user_id]['expired'] = True
-                        save_notification_flags(sent_notifications)
-                        logger.info(f"[SUBSCRIPTION_NOTIFICATIONS] Отправлено уведомление об истечении для user_id={user_id}")
+                    # Инициализируем запись, если её нет
+                    if user_id not in sent_notifications:
+                        sent_notifications[user_id] = {'3days': False, 'expired': False}
+                    
+                    # Проверяем флаг ПЕРЕД отправкой уведомления
+                    if not sent_notifications[user_id].get('expired', False):
+                        # Если подписка истекла более 7 дней назад, считаем что уведомление уже было отправлено ранее
+                        days_since_expiry = (today - expires_at).days
+                        if days_since_expiry > 7:
+                            logger.info(f"[SUBSCRIPTION_NOTIFICATIONS] Подписка истекла {days_since_expiry} дней назад для user_id={user_id}, устанавливаем флаг без отправки")
+                            sent_notifications[user_id]['expired'] = True
+                            save_notification_flags(sent_notifications)
+                        else:
+                            await send_expired_notification(bot, user_id, expires_at)
+                            sent_notifications[user_id]['expired'] = True
+                            save_notification_flags(sent_notifications)
+                            logger.info(f"[SUBSCRIPTION_NOTIFICATIONS] Отправлено уведомление об истечении для user_id={user_id}")
+                    else:
+                        logger.debug(f"[SUBSCRIPTION_NOTIFICATIONS] Пропуск user_id={user_id} - уведомление уже было отправлено")
                 
                 # Проверяем, истекает ли подписка через 3 дня или меньше (но еще не истекла)
                 elif today <= expires_at <= three_days_later:
-                    if not sent_notifications[user_id]['3days']:
+                    if not sent_notifications.get(user_id, {}).get('3days', False):
                         await send_3days_notification(bot, user_id, expires_at)
+                        sent_notifications[user_id] = sent_notifications.get(user_id, {'3days': False, 'expired': False})
                         sent_notifications[user_id]['3days'] = True
                         save_notification_flags(sent_notifications)
                         logger.info(f"[SUBSCRIPTION_NOTIFICATIONS] Отправлено уведомление за 3 дня для user_id={user_id}")
+                    else:
+                        logger.debug(f"[SUBSCRIPTION_NOTIFICATIONS] Пропуск user_id={user_id} - уведомление за 3 дня уже было отправлено")
                 
                 # Сбрасываем флаги, если подписка была продлена (больше чем на 3 дня)
                 if expires_at > three_days_later:
@@ -193,6 +211,11 @@ async def send_expired_notification(bot: Bot, user_id: int, expires_at: datetime
 async def subscription_checker_task(bot: Bot):
     """Фоновая задача для периодической проверки подписок"""
     logger.info("[SUBSCRIPTION_NOTIFICATIONS] Запуск фоновой задачи проверки подписок")
+    
+    # Задержка перед первой проверкой, чтобы при перезапуске бота не отправлялись уведомления сразу
+    # Ждем 5 минут (300 секунд) после запуска бота
+    logger.info("[SUBSCRIPTION_NOTIFICATIONS] Ожидание 5 минут перед первой проверкой подписок (чтобы избежать уведомлений при перезапуске)")
+    await asyncio.sleep(300)
     
     while True:
         try:

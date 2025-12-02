@@ -133,10 +133,10 @@ async def cmd_cancel(message: Message):
 async def main():
     logger.info("🤖 Запуск бота...")
     try:
-        # Запускаем фоновую задачу для проверки подписок
-        from handlers.subscription_notifications import subscription_checker_task
-        task = asyncio.create_task(subscription_checker_task(bot))
-        logger.info("✅ Фоновая задача проверки подписок запущена")
+        # Фоновая задача для проверки подписок отключена - уведомления об истечении подписки не отправляются
+        # from handlers.subscription_notifications import subscription_checker_task
+        # task = asyncio.create_task(subscription_checker_task(bot))
+        # logger.info("✅ Фоновая задача проверки подписок запущена")
         
         logger.info("Подключение к Telegram API...")
         await dp.start_polling(bot, skip_updates=True)
@@ -144,13 +144,13 @@ async def main():
         logger.error(f"Ошибка при запуске бота: {e}", exc_info=True)
         raise
     finally:
-        # Отменяем фоновую задачу при остановке
-        if 'task' in locals():
-            task.cancel()
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
+        # Отменяем фоновую задачу при остановке (если она была запущена)
+        # if 'task' in locals():
+        #     task.cancel()
+        #     try:
+        #         await task
+        #     except asyncio.CancelledError:
+        #         pass
         await bot.session.close()
 
 if __name__ == '__main__':

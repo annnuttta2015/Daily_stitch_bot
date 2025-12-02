@@ -1,4 +1,5 @@
 """Модуль для анонимного опроса пользователей после завершения пробного периода"""
+import asyncio
 import logging
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
@@ -157,6 +158,7 @@ async def cmd_send_feedback(message: Message):
         await message.answer("🔄 Начинаю рассылку опроса...")
         
         all_users = get_all_user_ids()
+        logger.info(f"[FEEDBACK] Начало рассылки опроса. Всего пользователей: {len(all_users)}")
         success_count = 0
         skipped_count = 0
         error_count = 0
@@ -165,22 +167,38 @@ async def cmd_send_feedback(message: Message):
             try:
                 # Пропускаем администраторов
                 if ADMIN_IDS and target_user_id in ADMIN_IDS:
+                    logger.debug(f"[FEEDBACK] Пропуск user_id={target_user_id} - администратор")
                     skipped_count += 1
                     continue
                 
                 # Проверяем, был ли уже отправлен опрос
                 if get_user_feedback_given(target_user_id):
+                    logger.debug(f"[FEEDBACK] Пропуск user_id={target_user_id} - опрос уже был отправлен")
                     skipped_count += 1
                     continue
                 
                 # Проверяем, есть ли активная подписка
                 if is_subscribed(target_user_id):
+                    logger.debug(f"[FEEDBACK] Пропуск user_id={target_user_id} - есть активная подписка")
                     skipped_count += 1
                     continue
+                
+                # Проверяем, была ли пробная подписка (для рассылки отправляем всем без подписки)
+                # Но можно добавить дополнительную проверку, если нужно отправлять только тем, у кого была пробная
+                subscription = get_user_subscription(target_user_id)
+                # Для рассылки отправляем всем без активной подписки, независимо от того, была ли пробная
+                # Если нужно только тем, у кого была пробная, раскомментируйте следующую проверку:
+                # if not subscription or not subscription.get('isTrial', False):
+                #     skipped_count += 1
+                #     continue
                 
                 # Отправляем опрос
                 await send_feedback_request(bot, target_user_id)
                 success_count += 1
+                logger.info(f"[FEEDBACK] Опрос отправлен user_id={target_user_id}")
+                
+                # Небольшая задержка, чтобы избежать rate limiting
+                await asyncio.sleep(0.1)
                 
             except Exception as e:
                 error_count += 1
