@@ -53,12 +53,15 @@ async def process_entry_message(message: Message, user_id: int):
     
     if state['step'] == 'date':
         logger.info(f"[ENTRIES] Обработка даты для user_id={user_id}, text='{message.text}'")
-        text = message.text.strip().lower()
+        text = message.text.strip().lower() if message.text else ''
+        
+        date_obj = None
+        date = None
         
         try:
             if text == 'сегодня' or text == 'today':
-                date = datetime.now().strftime('%Y-%m-%d')
                 date_obj = datetime.now()
+                date = date_obj.strftime('%Y-%m-%d')
                 logger.info(f"[ENTRIES] Установлена дата 'сегодня': {date}")
             else:
                 try:
@@ -79,30 +82,80 @@ async def process_entry_message(message: Message, user_id: int):
                     date = date_obj.strftime('%Y-%m-%d')
                     logger.info(f"[ENTRIES] Распарсена дата: {date}")
                 except Exception as e:
-                    logger.warning(f"[ENTRIES] Ошибка парсинга даты: {e}, text='{message.text}'")
-                    await message.answer('❌ Неверный формат даты. Используйте ДД.ММ.ГГГГ или нажмите кнопку "📅 Сегодня"', reply_markup=get_back_keyboard())
+                    logger.warning(f"[ENTRIES] Ошибка парсинга даты: {e}, text='{message.text}'", exc_info=True)
+                    try:
+                        await message.answer(
+                            '❌ Неверный формат даты. Используйте ДД.ММ.ГГГГ или нажмите кнопку "📅 Сегодня"', 
+                            reply_markup=get_back_keyboard()
+                        )
+                    except Exception as send_error:
+                        logger.error(f"[ENTRIES] Ошибка при отправке сообщения об ошибке: {send_error}", exc_info=True)
                     return True
+            
+            # Проверяем, что date и date_obj установлены
+            if not date or not date_obj:
+                logger.error(f"[ENTRIES] date или date_obj не установлены после обработки: date={date}, date_obj={date_obj}")
+                try:
+                    await message.answer('❌ Ошибка при обработке даты. Попробуйте еще раз.', reply_markup=get_back_keyboard())
+                except:
+                    pass
+                return True
             
             state['date'] = date
             state['step'] = 'count'
             logger.info(f"[ENTRIES] Установлен шаг 'count', date={date}")
             
             # Используем безопасное форматирование даты без locale
-            months_ru = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
-                         'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря']
-            date_formatted = f"{date_obj.day} {months_ru[date_obj.month - 1]} {date_obj.year}"
+            try:
+                months_ru = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+                             'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря']
+                if date_obj and hasattr(date_obj, 'day') and hasattr(date_obj, 'month') and hasattr(date_obj, 'year'):
+                    date_formatted = f"{date_obj.day} {months_ru[date_obj.month - 1]} {date_obj.year}"
+                else:
+                    raise AttributeError("date_obj не имеет необходимых атрибутов")
+            except (IndexError, AttributeError, TypeError) as e:
+                logger.error(f"[ENTRIES] Ошибка при форматировании даты: {e}, date_obj={date_obj}")
+                # Если ошибка форматирования, используем простой формат
+                date_formatted = date.replace('-', '.')
             
-            logger.info(f"[ENTRIES] Отправка сообщения с подтверждением даты")
-            await message.answer(
-                f'✅ Дата: {date_formatted}\n\n'
-                'Введите количество крестиков (можно с половинкой, например: 254.5):',
-                reply_markup=get_back_keyboard()
-            )
-            logger.info(f"[ENTRIES] Сообщение с датой успешно отправлено")
+            logger.info(f"[ENTRIES] Отправка сообщения с подтверждением даты: {date_formatted}")
+            try:
+                await message.answer(
+                    f'✅ Дата: {date_formatted}\n\n'
+                    'Введите количество крестиков (можно с половинкой, например: 254.5):',
+                    reply_markup=get_back_keyboard()
+                )
+                logger.info(f"[ENTRIES] Сообщение с датой успешно отправлено")
+            except Exception as e:
+                logger.error(f"[ENTRIES] Ошибка при отправке сообщения с датой: {e}", exc_info=True)
+                # Пробуем отправить без форматирования
+                try:
+                    await message.answer(
+                        f'✅ Дата: {date}\n\n'
+                        'Введите количество крестиков (можно с половинкой, например: 254.5):',
+                        reply_markup=get_back_keyboard()
+                    )
+                    logger.info(f"[ENTRIES] Сообщение с датой отправлено в упрощенном формате")
+                except Exception as e2:
+                    logger.error(f"[ENTRIES] Критическая ошибка при отправке сообщения: {e2}", exc_info=True)
+                    # Последняя попытка - без клавиатуры
+                    try:
+                        await message.answer(
+                            f'✅ Дата: {date}\n\n'
+                            'Введите количество крестиков (можно с половинкой, например: 254.5):'
+                        )
+                    except Exception as e3:
+                        logger.error(f"[ENTRIES] Полный провал отправки сообщения: {e3}", exc_info=True)
             return True
         except Exception as e:
             logger.error(f"[ENTRIES] Критическая ошибка при обработке даты: {e}", exc_info=True)
-            await message.answer('❌ Произошла ошибка при обработке даты. Попробуйте еще раз.')
+            try:
+                await message.answer(
+                    '❌ Произошла ошибка при обработке даты. Попробуйте еще раз или используйте /start для перезапуска.',
+                    reply_markup=get_back_keyboard()
+                )
+            except Exception as send_error:
+                logger.error(f"[ENTRIES] Ошибка при отправке сообщения об ошибке: {send_error}", exc_info=True)
             return True
     
     elif state['step'] == 'count':
