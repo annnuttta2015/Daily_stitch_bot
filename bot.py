@@ -11,9 +11,6 @@ from data.storage import is_subscribed
 from handlers import commands, entries, statistics, projects, delete, hashtags, wishlist, notes, plans, calendar, challenges, subscriptions, period_comparison, export, admin, feedback
 from handlers.keyboards import get_main_menu
 
-# Настройка логирования
-from logging.handlers import RotatingFileHandler
-
 # Создаем директорию для логов, если её нет
 log_dir = 'logs'
 os.makedirs(log_dir, exist_ok=True)
@@ -79,7 +76,6 @@ async def handle_text_messages(message: Message):
     logger.info(f"[BOT] Проверка подписки для user_id={user_id}, subscribed={subscribed}")
     if not subscribed:
         # Проверяем, есть ли активные диалоги, которые нужно завершить
-        from handlers import entries, projects, delete, wishlist, notes, plans
         has_active_dialog = (
             user_id in entries.pending_entries or
             user_id in projects.pending_projects or
@@ -107,17 +103,10 @@ async def handle_text_messages(message: Message):
         # Если есть активный диалог, разрешаем его завершить
         logger.info(f"[BOT] Подписка истекла для user_id={user_id}, но есть активный диалог - разрешаем обработку")
     
-    # Обрабатываем диалоги в порядке приоритета (более специфичные первыми)
-    # Сначала проверяем планы, так как они могут быть более специфичными
-    try:
-        result = await plans.process_plan_message(message, user_id)
-        if result:
-            logger.info(f"[BOT] Сообщение обработано в process_plan_message, результат: {result}")
-            return
-    except Exception as e:
-        logger.error(f"[BOT] Ошибка в process_plan_message: {e}", exc_info=True)
+    # Обрабатываем диалоги в порядке приоритета
+    # Сначала проверяем активные диалоги (те, что требуют текстового ввода)
     
-    # Обрабатываем диалог добавления крестиков
+    # Обрабатываем диалог добавления крестиков (самый частый)
     try:
         result = await entries.process_entry_message(message, user_id)
         if result:
@@ -125,6 +114,15 @@ async def handle_text_messages(message: Message):
             return
     except Exception as e:
         logger.error(f"[BOT] Ошибка в process_entry_message: {e}", exc_info=True)
+    
+    # Обрабатываем диалог планов
+    try:
+        result = await plans.process_plan_message(message, user_id)
+        if result:
+            logger.info(f"[BOT] Сообщение обработано в process_plan_message, результат: {result}")
+            return
+    except Exception as e:
+        logger.error(f"[BOT] Ошибка в process_plan_message: {e}", exc_info=True)
     
     # Обрабатываем диалог добавления проекта
     try:
@@ -156,7 +154,6 @@ async def handle_text_messages(message: Message):
         logger.error(f"[BOT] Ошибка в process_note_message: {e}", exc_info=True)
     
     # Если сообщение не обработано ни одним диалогом, проверяем состояние
-    from handlers import entries, projects, delete, wishlist, notes, plans
     logger.info(f"[BOT] Сообщение не обработано ни одним диалогом, user_id={user_id}")
     logger.info(f"[BOT] pending_entries: {list(entries.pending_entries.keys())}")
     logger.info(f"[BOT] pending_projects: {list(projects.pending_projects.keys())}")

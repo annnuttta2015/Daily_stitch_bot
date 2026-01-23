@@ -108,7 +108,9 @@ async def process_entry_message(message: Message, user_id: int):
             
             state['date'] = date
             state['step'] = 'count'
-            logger.info(f"[ENTRIES] Установлен шаг 'count', date={date}")
+            # Обновляем состояние в pending_entries
+            pending_entries[user_id] = state
+            logger.info(f"[ENTRIES] Установлен шаг 'count', date={date}, pending_entries обновлен: {list(pending_entries.keys())}")
             
             # Используем безопасное форматирование даты без locale
             try:
@@ -177,7 +179,9 @@ async def process_entry_message(message: Message, user_id: int):
             
             state['count'] = count
             state['step'] = 'hashtag'
-            logger.info(f"[ENTRIES] Установлен шаг 'hashtag', count={count}")
+            # Обновляем состояние в pending_entries
+            pending_entries[user_id] = state
+            logger.info(f"[ENTRIES] Установлен шаг 'hashtag', count={count}, pending_entries обновлен: {list(pending_entries.keys())}")
             
             try:
                 logger.info("[ENTRIES] Получение хэштегов...")
@@ -407,7 +411,9 @@ async def callback_entry_date_today(callback: CallbackQuery):
     date_obj = datetime.now()
     state['date'] = date
     state['step'] = 'count'
-    logger.info(f"[ENTRIES] Установлена дата 'сегодня': {date}, шаг изменен на 'count'")
+    # Обновляем состояние в pending_entries
+    pending_entries[user_id] = state
+    logger.info(f"[ENTRIES] Установлена дата 'сегодня': {date}, шаг изменен на 'count', pending_entries обновлен: {list(pending_entries.keys())}")
     
     # Используем безопасное форматирование даты без locale
     months_ru = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
@@ -459,7 +465,9 @@ async def callback_entry_date_yesterday(callback: CallbackQuery):
     date = date_obj.strftime('%Y-%m-%d')
     state['date'] = date
     state['step'] = 'count'
-    logger.info(f"[ENTRIES] Установлена дата 'вчера': {date}, шаг изменен на 'count'")
+    # Обновляем состояние в pending_entries
+    pending_entries[user_id] = state
+    logger.info(f"[ENTRIES] Установлена дата 'вчера': {date}, шаг изменен на 'count', pending_entries обновлен: {list(pending_entries.keys())}")
     
     # Используем безопасное форматирование даты без locale
     months_ru = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня',

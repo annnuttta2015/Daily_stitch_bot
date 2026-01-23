@@ -176,6 +176,7 @@ async def callback_main_menu(callback: CallbackQuery):
     await safe_answer_callback(callback)
     # Очищаем все незавершенные диалоги при переходе в главное меню
     user_id = callback.from_user.id
+    # Импортируем здесь, чтобы избежать циклических импортов
     from handlers import entries, projects, delete, wishlist, notes, plans
     entries.clear_pending(user_id)
     projects.clear_pending_project(user_id)
