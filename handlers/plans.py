@@ -134,10 +134,17 @@ async def add_plan_dialog(message: Message, user_id: int):
 
 async def process_plan_message(message: Message, user_id: int):
     """Обработать сообщение для плана"""
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    logger.info(f"[PLANS] process_plan_message вызван для user_id={user_id}, pending_plans keys: {list(pending_plans.keys())}")
+    
     if user_id not in pending_plans:
+        logger.info(f"[PLANS] user_id {user_id} не найден в pending_plans")
         return False
     
     state = pending_plans[user_id]
+    logger.info(f"[PLANS] Обработка сообщения для user_id={user_id}, step={state.get('step')}, text='{message.text[:50] if message.text else 'None'}'")
     
     if state['step'] == 'name':
         name = message.text.strip()
@@ -336,7 +343,14 @@ async def callback_plans_menu(callback: CallbackQuery):
 
 @router.callback_query(F.data == "plan_add")
 async def callback_plan_add(callback: CallbackQuery):
+    import logging
+    logger = logging.getLogger(__name__)
+    
     await safe_answer_callback(callback, "Введите название плана в следующем сообщении")
+    user_id = callback.from_user.id
+    
+    logger.info(f"[PLANS] callback_plan_add вызван для user_id={user_id}")
+    
     try:
         await callback.message.edit_text(
             '📋 <b>Создание плана</b>\n\n'
@@ -355,7 +369,9 @@ async def callback_plan_add(callback: CallbackQuery):
             parse_mode='HTML',
             reply_markup=get_back_keyboard()
         )
-    pending_plans[callback.from_user.id] = {'step': 'name'}
+    
+    pending_plans[user_id] = {'step': 'name'}
+    logger.info(f"[PLANS] pending_plans обновлен для user_id={user_id}, step=name, keys: {list(pending_plans.keys())}")
 
 @router.callback_query(F.data == "plan_skip_hashtag")
 async def callback_plan_skip_hashtag(callback: CallbackQuery):

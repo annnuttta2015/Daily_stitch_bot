@@ -106,6 +106,13 @@ async def handle_text_messages(message: Message):
         # Если есть активный диалог, разрешаем его завершить
         logger.info(f"[BOT] Подписка истекла для user_id={user_id}, но есть активный диалог - разрешаем обработку")
     
+    # Обрабатываем диалоги в порядке приоритета (более специфичные первыми)
+    # Сначала проверяем планы, так как они могут быть более специфичными
+    result = await plans.process_plan_message(message, user_id)
+    if result:
+        logger.info(f"[BOT] Сообщение обработано в process_plan_message, результат: {result}")
+        return
+    
     # Обрабатываем диалог добавления крестиков
     result = await entries.process_entry_message(message, user_id)
     if result:
@@ -126,11 +133,10 @@ async def handle_text_messages(message: Message):
     
     # Обрабатываем диалог заметок
     if await notes.process_note_message(message, user_id):
+        logger.info(f"[BOT] Сообщение обработано в process_note_message")
         return
     
-    # Обрабатываем диалог планов
-    if await plans.process_plan_message(message, user_id):
-        return
+    logger.info(f"[BOT] Сообщение не обработано ни одним диалогом, user_id={user_id}, pending_plans keys: {list(plans.pending_plans.keys())}")
 
 # Обработка фотографий
 @dp.message(lambda msg: msg.photo is not None)
