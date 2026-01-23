@@ -1,6 +1,6 @@
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
-from datetime import datetime
+from datetime import datetime, timedelta
 from dateutil import parser
 from data.storage import get_plans, save_plan, delete_plan, get_entries, format_number
 from handlers.keyboards import get_back_keyboard
@@ -80,13 +80,33 @@ async def show_plans(message: Message, user_id: int):
         current = sum(e.get('count', 0) for e in plan_entries)
         progress = (current / target * 100) if target > 0 else 0
         progress_bar = "█" * int(progress / 5) + "░" * (20 - int(progress / 5))
+        remaining = max(0, target - current)
         
         status = "✅" if current >= target else "⏳"
         date_info = f" до {target_date}" if target_date else ""
         
         text += f"{i}. {status} <b>{name}</b>\n"
         text += f"   {format_number(current)} / {format_number(target)} крестиков ({progress:.1f}%)\n"
-        text += f"   {progress_bar}\n\n"
+        text += f"   {progress_bar}\n"
+        
+        # Расчет дневной нормы, если есть целевая дата и цель не выполнена
+        if target_date and remaining > 0:
+            try:
+                target_date_obj = datetime.strptime(target_date, '%Y-%m-%d').date()
+                today = datetime.now().date()
+                days_remaining = (target_date_obj - today).days
+                
+                if days_remaining > 0:
+                    daily_target = remaining / days_remaining
+                    text += f"   📅 Норма в день: {format_number(daily_target)} крестиков ({days_remaining} дней)\n"
+                elif days_remaining == 0:
+                    text += f"   ⚠️ Срок истекает сегодня! Нужно: {format_number(remaining)} крестиков\n"
+                else:
+                    text += f"   ❌ Срок прошел ({abs(days_remaining)} дней назад)\n"
+            except (ValueError, TypeError):
+                pass  # Если дата некорректная, просто пропускаем
+        
+        text += "\n"
         
         keyboard.append([InlineKeyboardButton(
             text=f"{status} {name[:30]}",
@@ -265,10 +285,38 @@ async def show_plan(message: Message, user_id: int, plan_id: str):
         f'Осталось: {format_number(remaining)} крестиков\n'
     )
     
+    # Расчет дневной нормы, если есть целевая дата
+    target_date_str = plan.get('targetDate')
+    if target_date_str and remaining > 0:
+        try:
+            target_date = datetime.strptime(target_date_str, '%Y-%m-%d').date()
+            today = datetime.now().date()
+            days_remaining = (target_date - today).days
+            
+            if days_remaining > 0:
+                daily_target = remaining / days_remaining
+                text += f'\n📅 <b>Норма в день:</b> {format_number(daily_target)} крестиков\n'
+                text += f'⏰ Осталось дней: {days_remaining}'
+            elif days_remaining == 0:
+                text += f'\n⚠️ <b>Срок истекает сегодня!</b>\n'
+                text += f'Нужно вышить: {format_number(remaining)} крестиков'
+            else:
+                text += f'\n❌ <b>Срок прошел</b> ({abs(days_remaining)} дней назад)'
+        except (ValueError, TypeError):
+            pass  # Если дата некорректная, просто пропускаем
+    
     if plan.get('hashtag'):
-        text += f'\nХэштег: #{plan.get("hashtag")}'
+        text += f'\n\nХэштег: #{plan.get("hashtag")}'
     if plan.get('targetDate'):
-        text += f'\nЦелевая дата: {plan.get("targetDate")}'
+        # Форматируем дату для отображения
+        try:
+            target_date_obj = datetime.strptime(target_date_str, '%Y-%m-%d')
+            months_ru = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+                         'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря']
+            date_formatted = f"{target_date_obj.day} {months_ru[target_date_obj.month - 1]} {target_date_obj.year}"
+            text += f'\nЦелевая дата: {date_formatted}'
+        except (ValueError, TypeError):
+            text += f'\nЦелевая дата: {target_date_str}'
     
     keyboard = [
         [InlineKeyboardButton(text='🗑️ Удалить', callback_data=f"plan_delete_{plan_id}")],

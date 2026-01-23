@@ -6,7 +6,7 @@ import json
 from datetime import datetime, timedelta
 from aiogram import Bot
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from data.storage import get_user_subscription, get_all_user_ids, DATA_DIR
+from data.storage import get_user_subscription, get_all_user_ids, DATA_DIR, is_subscribed
 
 logger = logging.getLogger(__name__)
 
@@ -38,13 +38,13 @@ def save_notification_flags(flags):
         logger.error(f"[SUBSCRIPTION_NOTIFICATIONS] Ошибка при сохранении флагов уведомлений: {e}")
 
 # Хранилище для отслеживания отправленных уведомлений
-# Формат: {user_id: {'3days': bool, 'expired': bool}}
+# Формат: {user_id: {'3days': bool, '1day': bool, 'expired': bool}}
 # Загружаем из файла при старте
 sent_notifications = load_notification_flags()
 logger.info(f"[SUBSCRIPTION_NOTIFICATIONS] Загружено {len(sent_notifications)} записей о флагах уведомлений")
 
 async def check_expiring_subscriptions(bot: Bot):
-    """Проверка подписок, которые скоро истекают или истекли"""
+    """Проверка подписок, которые скоро истекают (только для активных подписчиков)"""
     try:
         logger.info("[SUBSCRIPTION_NOTIFICATIONS] Начало проверки подписок")
         
@@ -53,10 +53,17 @@ async def check_expiring_subscriptions(bot: Bot):
         logger.debug(f"[SUBSCRIPTION_NOTIFICATIONS] Проверка {len(user_ids)} пользователей")
         
         today = datetime.now().date()
+        one_day_later = today + timedelta(days=1)
         three_days_later = today + timedelta(days=3)
         
         for user_id in user_ids:
             try:
+                # Проверяем, есть ли активная подписка
+                if not is_subscribed(user_id):
+                    # У пользователя нет активной подписки - пропускаем
+                    logger.debug(f"[SUBSCRIPTION_NOTIFICATIONS] Нет активной подписки для user_id={user_id}, пропускаем")
+                    continue
+                
                 subscription = get_user_subscription(user_id)
                 if not subscription:
                     continue
@@ -71,38 +78,32 @@ async def check_expiring_subscriptions(bot: Bot):
                     logger.warning(f"[SUBSCRIPTION_NOTIFICATIONS] Не удалось распарсить дату для user_id={user_id}: {expires_at_str}")
                     continue
                 
+                # Проверяем, что подписка еще активна (не истекла)
+                if expires_at < today:
+                    # Подписка истекла - не отправляем уведомления
+                    logger.debug(f"[SUBSCRIPTION_NOTIFICATIONS] Подписка истекла для user_id={user_id}, пропускаем уведомления")
+                    continue
+                
                 # Инициализируем запись для пользователя, если её нет
                 if user_id not in sent_notifications:
-                    sent_notifications[user_id] = {'3days': False, 'expired': False}
+                    sent_notifications[user_id] = {'3days': False, '1day': False, 'expired': False}
                 
-                # Проверяем, истекла ли подписка
-                if expires_at < today:
-                    # Подписка истекла
-                    # Инициализируем запись, если её нет
-                    if user_id not in sent_notifications:
-                        sent_notifications[user_id] = {'3days': False, 'expired': False}
-                    
-                    # Проверяем флаг ПЕРЕД отправкой уведомления
-                    if not sent_notifications[user_id].get('expired', False):
-                        # Если подписка истекла более 7 дней назад, считаем что уведомление уже было отправлено ранее
-                        days_since_expiry = (today - expires_at).days
-                        if days_since_expiry > 7:
-                            logger.info(f"[SUBSCRIPTION_NOTIFICATIONS] Подписка истекла {days_since_expiry} дней назад для user_id={user_id}, устанавливаем флаг без отправки")
-                            sent_notifications[user_id]['expired'] = True
-                            save_notification_flags(sent_notifications)
-                        else:
-                            await send_expired_notification(bot, user_id, expires_at)
-                            sent_notifications[user_id]['expired'] = True
-                            save_notification_flags(sent_notifications)
-                            logger.info(f"[SUBSCRIPTION_NOTIFICATIONS] Отправлено уведомление об истечении для user_id={user_id}")
+                # Проверяем, истекает ли подписка через 1 день (но еще не истекла)
+                if today <= expires_at <= one_day_later:
+                    if not sent_notifications.get(user_id, {}).get('1day', False):
+                        await send_1day_notification(bot, user_id, expires_at)
+                        sent_notifications[user_id] = sent_notifications.get(user_id, {'3days': False, '1day': False, 'expired': False})
+                        sent_notifications[user_id]['1day'] = True
+                        save_notification_flags(sent_notifications)
+                        logger.info(f"[SUBSCRIPTION_NOTIFICATIONS] Отправлено уведомление за 1 день для user_id={user_id}")
                     else:
-                        logger.debug(f"[SUBSCRIPTION_NOTIFICATIONS] Пропуск user_id={user_id} - уведомление уже было отправлено")
+                        logger.debug(f"[SUBSCRIPTION_NOTIFICATIONS] Пропуск user_id={user_id} - уведомление за 1 день уже было отправлено")
                 
-                # Проверяем, истекает ли подписка через 3 дня или меньше (но еще не истекла)
-                elif today <= expires_at <= three_days_later:
+                # Проверяем, истекает ли подписка через 2-3 дня (но еще не истекла и не через 1 день)
+                elif one_day_later < expires_at <= three_days_later:
                     if not sent_notifications.get(user_id, {}).get('3days', False):
                         await send_3days_notification(bot, user_id, expires_at)
-                        sent_notifications[user_id] = sent_notifications.get(user_id, {'3days': False, 'expired': False})
+                        sent_notifications[user_id] = sent_notifications.get(user_id, {'3days': False, '1day': False, 'expired': False})
                         sent_notifications[user_id]['3days'] = True
                         save_notification_flags(sent_notifications)
                         logger.info(f"[SUBSCRIPTION_NOTIFICATIONS] Отправлено уведомление за 3 дня для user_id={user_id}")
@@ -111,7 +112,7 @@ async def check_expiring_subscriptions(bot: Bot):
                 
                 # Сбрасываем флаги, если подписка была продлена (больше чем на 3 дня)
                 if expires_at > three_days_later:
-                    sent_notifications[user_id] = {'3days': False, 'expired': False}
+                    sent_notifications[user_id] = {'3days': False, '1day': False, 'expired': False}
                     save_notification_flags(sent_notifications)
                     
             except Exception as e:
@@ -122,6 +123,35 @@ async def check_expiring_subscriptions(bot: Bot):
         
     except Exception as e:
         logger.error(f"[SUBSCRIPTION_NOTIFICATIONS] Критическая ошибка при проверке подписок: {e}", exc_info=True)
+
+async def send_1day_notification(bot: Bot, user_id: int, expires_at: datetime.date):
+    """Отправить уведомление за 1 день до истечения подписки"""
+    try:
+        expires_str = expires_at.strftime("%d.%m.%Y")
+        days_left = (expires_at - datetime.now().date()).days
+        
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[[
+            InlineKeyboardButton(
+                text='💳 Продлить подписку',
+                callback_data='subscribe'
+            )
+        ]])
+        
+        message_text = (
+            '⏰ <b>Важное напоминание о подписке</b>\n\n'
+            f'⚠️ Ваша подписка истекает <b>завтра</b> ({expires_str})!\n\n'
+            'Чтобы не потерять доступ к боту, продлите подписку прямо сейчас.'
+        )
+        
+        await bot.send_message(
+            chat_id=user_id,
+            text=message_text,
+            parse_mode='HTML',
+            reply_markup=keyboard
+        )
+        
+    except Exception as e:
+        logger.error(f"[SUBSCRIPTION_NOTIFICATIONS] Ошибка при отправке уведомления за 1 день для user_id={user_id}: {e}", exc_info=True)
 
 async def send_3days_notification(bot: Bot, user_id: int, expires_at: datetime.date):
     """Отправить уведомление за 3 дня до истечения подписки"""
@@ -233,7 +263,7 @@ async def subscription_checker_task(bot: Bot):
 def reset_notification_flags(user_id: int):
     """Сбросить флаги уведомлений для пользователя (вызывается при продлении подписки)"""
     if user_id in sent_notifications:
-        sent_notifications[user_id] = {'3days': False, 'expired': False}
+        sent_notifications[user_id] = {'3days': False, '1day': False, 'expired': False}
         save_notification_flags(sent_notifications)
         logger.debug(f"[SUBSCRIPTION_NOTIFICATIONS] Сброшены флаги уведомлений для user_id={user_id}")
 

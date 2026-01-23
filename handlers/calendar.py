@@ -8,6 +8,44 @@ from utils import safe_answer_callback
 
 router = Router()
 
+def generate_daily_list(year: int, month: int, user_id: int) -> str:
+    """Генерировать список крестиков по дням месяца"""
+    entries = get_entries(user_id)
+    
+    # Создаем словарь дат с количеством крестиков
+    dates_data = {}
+    for entry in entries:
+        date_str = entry.get('date', '')
+        try:
+            entry_date = datetime.strptime(date_str, '%Y-%m-%d')
+            if entry_date.year == year and entry_date.month == month:
+                day = entry_date.day
+                if day not in dates_data:
+                    dates_data[day] = 0.0
+                dates_data[day] += float(entry.get('count', 0))
+        except:
+            continue
+    
+    # Названия месяцев
+    months = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+              'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
+    
+    month_name = months[month - 1]
+    days_in_month = monthrange(year, month)[1]
+    
+    # Заголовок
+    text = f'<b>📊 {month_name} {year} - Крестики по дням</b>\n\n'
+    text += '<code>'
+    
+    # Выводим каждый день месяца
+    for day in range(1, days_in_month + 1):
+        count = dates_data.get(day, 0.0)
+        text += f'{day:2d} число: {format_number(count)} крестиков\n'
+    
+    text += '</code>'
+    
+    return text
+
 def generate_calendar(year: int, month: int, user_id: int) -> str:
     """Генерировать календарь с отметками вышивальных дней"""
     entries = get_entries(user_id)
@@ -141,6 +179,10 @@ async def show_calendar(message: Message, user_id: int, year: int = None, month:
     ))
     
     keyboard.append(nav_buttons)
+    keyboard.append([InlineKeyboardButton(
+        text='📊 Список по дням',
+        callback_data=f"calendar_list_{year}_{month}"
+    )])
     keyboard.append([InlineKeyboardButton(text='🔙 Главное меню', callback_data='main_menu')])
     
     await message.answer(
@@ -188,6 +230,10 @@ async def callback_calendar_menu(callback: CallbackQuery):
     ))
     
     keyboard.append(nav_buttons)
+    keyboard.append([InlineKeyboardButton(
+        text='📊 Список по дням',
+        callback_data=f"calendar_list_{now.year}_{now.month}"
+    )])
     keyboard.append([InlineKeyboardButton(text='🔙 Главное меню', callback_data='main_menu')])
     
     try:
@@ -206,6 +252,70 @@ async def callback_calendar_menu(callback: CallbackQuery):
 @router.callback_query(F.data.startswith("calendar_"))
 async def callback_calendar(callback: CallbackQuery):
     await safe_answer_callback(callback)
+    
+    # Проверяем, это запрос списка по дням или обычный календарь
+    if callback.data.startswith("calendar_list_"):
+        parts = callback.data.replace("calendar_list_", "").split("_")
+        if len(parts) == 2:
+            year = int(parts[0])
+            month = int(parts[1])
+            daily_list_text = generate_daily_list(year, month, callback.from_user.id)
+            
+            # Кнопки навигации для возврата к календарю
+            keyboard = []
+            nav_buttons = []
+            now = datetime.now()
+            
+            # Предыдущий месяц
+            prev_month = month - 1
+            prev_year = year
+            if prev_month < 1:
+                prev_month = 12
+                prev_year -= 1
+            nav_buttons.append(InlineKeyboardButton(
+                text='⬅️',
+                callback_data=f"calendar_list_{prev_year}_{prev_month}"
+            ))
+            
+            # Текущий месяц
+            nav_buttons.append(InlineKeyboardButton(
+                text='📅 Сегодня',
+                callback_data=f"calendar_list_{now.year}_{now.month}"
+            ))
+            
+            # Следующий месяц
+            next_month = month + 1
+            next_year = year
+            if next_month > 12:
+                next_month = 1
+                next_year += 1
+            nav_buttons.append(InlineKeyboardButton(
+                text='➡️',
+                callback_data=f"calendar_list_{next_year}_{next_month}"
+            ))
+            
+            keyboard.append(nav_buttons)
+            keyboard.append([InlineKeyboardButton(
+                text='📅 Календарь',
+                callback_data=f"calendar_{year}_{month}"
+            )])
+            keyboard.append([InlineKeyboardButton(text='🔙 Главное меню', callback_data='main_menu')])
+            
+            try:
+                await callback.message.edit_text(
+                    daily_list_text,
+                    parse_mode='HTML',
+                    reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard)
+                )
+            except:
+                await callback.message.answer(
+                    daily_list_text,
+                    parse_mode='HTML',
+                    reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard)
+                )
+        return
+    
+    # Обычный календарь
     parts = callback.data.replace("calendar_", "").split("_")
     if len(parts) == 2:
         year = int(parts[0])
@@ -246,6 +356,10 @@ async def callback_calendar(callback: CallbackQuery):
         ))
         
         keyboard.append(nav_buttons)
+        keyboard.append([InlineKeyboardButton(
+            text='📊 Список по дням',
+            callback_data=f"calendar_list_{year}_{month}"
+        )])
         keyboard.append([InlineKeyboardButton(text='🔙 Главное меню', callback_data='main_menu')])
         
         try:

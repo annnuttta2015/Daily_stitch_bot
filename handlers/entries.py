@@ -1,6 +1,6 @@
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
-from datetime import datetime
+from datetime import datetime, timedelta
 from dateutil import parser
 from data.storage import add_count_to_date, get_entries, get_all_hashtags, get_user_challenges, update_user_challenge, format_number
 from data.challenges import check_challenge_progress
@@ -26,9 +26,10 @@ async def add_stitches_dialog(message: Message, user_id: int):
     except Exception as e:
         logger.error(f"[ENTRIES] Ошибка при получении хэштегов в add_stitches_dialog: {e}", exc_info=True)
     
-    # Клавиатура с кнопкой "Сегодня"
+    # Клавиатура с кнопками "Сегодня" и "Вчера"
     keyboard = InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text='📅 Сегодня', callback_data='entry_date_today')
+        InlineKeyboardButton(text='📅 Сегодня', callback_data='entry_date_today'),
+        InlineKeyboardButton(text='📅 Вчера', callback_data='entry_date_yesterday')
     ]])
     
     logger.info(f"[ENTRIES] Отправка сообщения с запросом даты")
@@ -63,6 +64,10 @@ async def process_entry_message(message: Message, user_id: int):
                 date_obj = datetime.now()
                 date = date_obj.strftime('%Y-%m-%d')
                 logger.info(f"[ENTRIES] Установлена дата 'сегодня': {date}")
+            elif text == 'вчера' or text == 'yesterday':
+                date_obj = datetime.now() - timedelta(days=1)
+                date = date_obj.strftime('%Y-%m-%d')
+                logger.info(f"[ENTRIES] Установлена дата 'вчера': {date}")
             else:
                 try:
                     # Пробуем распарсить дату
@@ -403,6 +408,58 @@ async def callback_entry_date_today(callback: CallbackQuery):
     state['date'] = date
     state['step'] = 'count'
     logger.info(f"[ENTRIES] Установлена дата 'сегодня': {date}, шаг изменен на 'count'")
+    
+    # Используем безопасное форматирование даты без locale
+    months_ru = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+                 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря']
+    date_formatted = f"{date_obj.day} {months_ru[date_obj.month - 1]} {date_obj.year}"
+    
+    try:
+        logger.info(f"[ENTRIES] Попытка отредактировать сообщение с датой")
+        await callback.message.edit_text(
+            f'✅ Дата: {date_formatted}\n\n'
+            'Введите количество крестиков:',
+            reply_markup=get_back_keyboard()
+        )
+        logger.info(f"[ENTRIES] Сообщение успешно отредактировано")
+    except Exception as e:
+        # Если не удалось отредактировать, отправляем новое сообщение
+        logger.error(f"[ENTRIES] Ошибка при редактировании сообщения: {e}", exc_info=True)
+        try:
+            await callback.message.answer(
+                f'✅ Дата: {date_formatted}\n\n'
+                'Введите количество крестиков:',
+                reply_markup=get_back_keyboard()
+            )
+            logger.info(f"[ENTRIES] Новое сообщение с датой отправлено")
+        except Exception as e2:
+            logger.error(f"[ENTRIES] Критическая ошибка при отправке сообщения: {e2}", exc_info=True)
+
+@router.callback_query(F.data == "entry_date_yesterday")
+async def callback_entry_date_yesterday(callback: CallbackQuery):
+    """Обработка кнопки 'Вчера' при вводе даты"""
+    await safe_answer_callback(callback)
+    user_id = callback.from_user.id
+    
+    logger.info(f"[ENTRIES] Обработка кнопки 'Вчера' для user_id={user_id}")
+    
+    if user_id not in pending_entries:
+        logger.warning(f"[ENTRIES] user_id {user_id} не найден в pending_entries при обработке кнопки 'Вчера'")
+        await callback.message.answer('❌ Сессия истекла. Начните заново.')
+        return
+    
+    state = pending_entries[user_id]
+    if state.get('step') != 'date':
+        logger.warning(f"[ENTRIES] Неверный шаг при обработке кнопки 'Вчера': {state.get('step')}")
+        await callback.message.answer('❌ Неверный шаг диалога.')
+        return
+    
+    # Устанавливаем вчерашнюю дату
+    date_obj = datetime.now() - timedelta(days=1)
+    date = date_obj.strftime('%Y-%m-%d')
+    state['date'] = date
+    state['step'] = 'count'
+    logger.info(f"[ENTRIES] Установлена дата 'вчера': {date}, шаг изменен на 'count'")
     
     # Используем безопасное форматирование даты без locale
     months_ru = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня',

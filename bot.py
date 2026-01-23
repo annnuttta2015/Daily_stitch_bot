@@ -71,11 +71,40 @@ dp.include_router(feedback.router)
 async def handle_text_messages(message: Message):
     user_id = message.from_user.id
     
-    if not is_subscribed(user_id):
-        return
-    
     # Логируем входящее текстовое сообщение
     logger.info(f"[BOT] Получено текстовое сообщение от user_id={user_id}, text='{message.text[:100] if message.text else 'None'}'")
+    
+    # Проверяем подписку, но не блокируем полностью - проверяем, есть ли активные диалоги
+    subscribed = is_subscribed(user_id)
+    if not subscribed:
+        # Проверяем, есть ли активные диалоги, которые нужно завершить
+        from handlers import entries, projects, delete, wishlist, notes, plans
+        has_active_dialog = (
+            user_id in entries.pending_entries or
+            user_id in projects.pending_projects or
+            user_id in delete.pending_deletes or
+            user_id in wishlist.pending_wishlist or
+            user_id in notes.pending_notes or
+            user_id in plans.pending_plans
+        )
+        
+        if not has_active_dialog:
+            # Если нет активных диалогов, сообщаем об истекшей подписке
+            logger.info(f"[BOT] Подписка истекла для user_id={user_id}, нет активных диалогов - блокируем")
+            try:
+                from handlers.keyboards import get_main_menu
+                await message.answer(
+                    '🔒 <b>Подписка истекла</b>\n\n'
+                    'Для использования бота необходима активная подписка.\n\n'
+                    'Используйте кнопку "💳 Подписка" для оформления.',
+                    parse_mode='HTML',
+                    reply_markup=get_main_menu()
+                )
+            except Exception as e:
+                logger.error(f"[BOT] Ошибка при отправке сообщения об истекшей подписке: {e}", exc_info=True)
+            return
+        # Если есть активный диалог, разрешаем его завершить
+        logger.info(f"[BOT] Подписка истекла для user_id={user_id}, но есть активный диалог - разрешаем обработку")
     
     # Обрабатываем диалог добавления крестиков
     result = await entries.process_entry_message(message, user_id)
@@ -133,10 +162,10 @@ async def cmd_cancel(message: Message):
 async def main():
     logger.info("🤖 Запуск бота...")
     try:
-        # Фоновая задача для проверки подписок отключена - уведомления об истечении подписки не отправляются
-        # from handlers.subscription_notifications import subscription_checker_task
-        # task = asyncio.create_task(subscription_checker_task(bot))
-        # logger.info("✅ Фоновая задача проверки подписок запущена")
+        # Фоновая задача для проверки подписок
+        from handlers.subscription_notifications import subscription_checker_task
+        task = asyncio.create_task(subscription_checker_task(bot))
+        logger.info("✅ Фоновая задача проверки подписок запущена")
         
         logger.info("Подключение к Telegram API...")
         await dp.start_polling(bot, skip_updates=True)
@@ -145,12 +174,12 @@ async def main():
         raise
     finally:
         # Отменяем фоновую задачу при остановке (если она была запущена)
-        # if 'task' in locals():
-        #     task.cancel()
-        #     try:
-        #         await task
-        #     except asyncio.CancelledError:
-        #         pass
+        if 'task' in locals():
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
         await bot.session.close()
 
 if __name__ == '__main__':
