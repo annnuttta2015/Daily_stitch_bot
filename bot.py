@@ -76,6 +76,7 @@ async def handle_text_messages(message: Message):
     
     # Проверяем подписку, но не блокируем полностью - проверяем, есть ли активные диалоги
     subscribed = is_subscribed(user_id)
+    logger.info(f"[BOT] Проверка подписки для user_id={user_id}, subscribed={subscribed}")
     if not subscribed:
         # Проверяем, есть ли активные диалоги, которые нужно завершить
         from handlers import entries, projects, delete, wishlist, notes, plans
@@ -108,35 +109,72 @@ async def handle_text_messages(message: Message):
     
     # Обрабатываем диалоги в порядке приоритета (более специфичные первыми)
     # Сначала проверяем планы, так как они могут быть более специфичными
-    result = await plans.process_plan_message(message, user_id)
-    if result:
-        logger.info(f"[BOT] Сообщение обработано в process_plan_message, результат: {result}")
-        return
+    try:
+        result = await plans.process_plan_message(message, user_id)
+        if result:
+            logger.info(f"[BOT] Сообщение обработано в process_plan_message, результат: {result}")
+            return
+    except Exception as e:
+        logger.error(f"[BOT] Ошибка в process_plan_message: {e}", exc_info=True)
     
     # Обрабатываем диалог добавления крестиков
-    result = await entries.process_entry_message(message, user_id)
-    if result:
-        logger.info(f"[BOT] Сообщение обработано в process_entry_message, результат: {result}")
-        return
+    try:
+        result = await entries.process_entry_message(message, user_id)
+        if result:
+            logger.info(f"[BOT] Сообщение обработано в process_entry_message, результат: {result}")
+            return
+    except Exception as e:
+        logger.error(f"[BOT] Ошибка в process_entry_message: {e}", exc_info=True)
     
     # Обрабатываем диалог добавления проекта
-    if await projects.process_project_message(message, user_id):
-        return
+    try:
+        if await projects.process_project_message(message, user_id):
+            return
+    except Exception as e:
+        logger.error(f"[BOT] Ошибка в process_project_message: {e}", exc_info=True)
     
     # Обрабатываем диалог удаления
-    if await delete.process_delete_message(message, user_id):
-        return
+    try:
+        if await delete.process_delete_message(message, user_id):
+            return
+    except Exception as e:
+        logger.error(f"[BOT] Ошибка в process_delete_message: {e}", exc_info=True)
     
     # Обрабатываем диалог вишлиста
-    if await wishlist.process_wishlist_message(message, user_id):
-        return
+    try:
+        if await wishlist.process_wishlist_message(message, user_id):
+            return
+    except Exception as e:
+        logger.error(f"[BOT] Ошибка в process_wishlist_message: {e}", exc_info=True)
     
     # Обрабатываем диалог заметок
-    if await notes.process_note_message(message, user_id):
-        logger.info(f"[BOT] Сообщение обработано в process_note_message")
-        return
+    try:
+        if await notes.process_note_message(message, user_id):
+            logger.info(f"[BOT] Сообщение обработано в process_note_message")
+            return
+    except Exception as e:
+        logger.error(f"[BOT] Ошибка в process_note_message: {e}", exc_info=True)
     
-    logger.info(f"[BOT] Сообщение не обработано ни одним диалогом, user_id={user_id}, pending_plans keys: {list(plans.pending_plans.keys())}")
+    # Если сообщение не обработано ни одним диалогом, проверяем состояние
+    from handlers import entries, projects, delete, wishlist, notes, plans
+    logger.info(f"[BOT] Сообщение не обработано ни одним диалогом, user_id={user_id}")
+    logger.info(f"[BOT] pending_entries: {list(entries.pending_entries.keys())}")
+    logger.info(f"[BOT] pending_projects: {list(projects.pending_projects.keys())}")
+    logger.info(f"[BOT] pending_plans: {list(plans.pending_plans.keys())}")
+    logger.info(f"[BOT] pending_notes: {list(notes.pending_notes.keys())}")
+    logger.info(f"[BOT] pending_wishlist: {list(wishlist.pending_wishlist.keys())}")
+    
+    # Если пользователь не в активном диалоге, показываем главное меню
+    if subscribed:
+        try:
+            from handlers.keyboards import get_main_menu
+            await message.answer(
+                '💬 Я не понял ваше сообщение.\n\n'
+                'Используйте кнопки меню для работы с ботом.',
+                reply_markup=get_main_menu()
+            )
+        except Exception as e:
+            logger.error(f"[BOT] Ошибка при отправке сообщения: {e}", exc_info=True)
 
 # Обработка фотографий
 @dp.message(lambda msg: msg.photo is not None)
